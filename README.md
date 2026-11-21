@@ -46,3 +46,11 @@ docker compose logs -f api worker web
 
 Lihat [docs/03-pengembangan-docker.md](docs/03-pengembangan-docker.md#deploy-ke-vps-yang-sudah-punya-nginx-tanpa-docker-untuk-aplikasi-lain).
 Ringkasnya: `compose.prod.yaml` (nginx container di `127.0.0.1:8081`), lalu Nginx host + certbot meneruskan domain ke port itu.
+
+Semua rahasia produksi (SECRET_KEY, kunci enkripsi NIK, password MySQL) dibuat sekaligus dengan:
+
+```bash
+./scripts/generate-secrets.sh rt.domain.id
+```
+
+Simpan salinan `FIELD_ENCRYPTION_KEY` yang dicetak di tempat aman di luar server.

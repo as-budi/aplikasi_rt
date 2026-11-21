@@ -457,16 +457,12 @@ Nginx host cukup meneruskan semua request domain RT ke satu port lokal. Semua at
    ```bash
    sudo mkdir -p /opt/aplikasi-rt && sudo chown $USER: /opt/aplikasi-rt
    git clone <repo> /opt/aplikasi-rt && cd /opt/aplikasi-rt
-   cp backend/.env.example backend/.env.prod   # isi SECRET_KEY, password DB, domain
+   ./scripts/generate-secrets.sh rt.domain.id   # membuat .env.db & backend/.env.prod sekaligus
    ```
-   Isi penting `backend/.env.prod`:
-   ```dotenv
-   DEBUG=False
-   ALLOWED_HOSTS=rt.domain.id
-   CSRF_TRUSTED_ORIGINS=https://rt.domain.id
-   DATABASE_URL=mysql://rt:<password-kuat>@db:3306/aplikasi_rt
-   CELERY_BROKER_URL=redis://redis:6379/0
-   ```
+   Skrip ini (hanya butuh `openssl`) membuat semua rahasia secara acak: `SECRET_KEY`, `FIELD_ENCRYPTION_KEY`, password MySQL user & root. Password di `DATABASE_URL` otomatis sama dengan `.env.db`, kedua file diberi izin 600, dan file yang sudah ada tidak ditimpa.
+   - **Simpan salinan `FIELD_ENCRYPTION_KEY`** (dicetak di layar) di password manager. Tanpa kunci itu, NIK/No. KK di database dan backup tidak bisa dibaca.
+   - Password MySQL hanya berlaku saat volume database pertama kali dibuat. Mengubah `.env.db` setelahnya tidak mengganti password di database.
+   - Password akun admin aplikasi dibuat saat `createsuperuser`. Untuk membuat yang acak: `openssl rand -base64 18`.
 4. **`compose.prod.yaml`** (inti). **Hanya nginx container yang membuka port, dan hanya ke `127.0.0.1`:**
    ```yaml
    x-django: &django

@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 
 from apps.core.models import audit
 from apps.core.permissions import is_staff_rt
+from apps.finance.views import show_detail
 
 from .documents import DOCUMENTS
 from .render import to_pdf, to_xlsx
@@ -35,7 +36,7 @@ class ExportView(APIView):
         except ValueError:
             raise ValidationError({"year": "Tahun tidak valid."})
 
-        doc = builder(year)
+        doc = builder(year, private=show_detail(request.user))
         content = to_xlsx(doc) if fmt == "xlsx" else to_pdf(doc)
         audit(request.user, f"ekspor_{kind}", f"{doc.filename}.{fmt}")
 

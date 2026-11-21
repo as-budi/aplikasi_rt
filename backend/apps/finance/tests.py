@@ -58,3 +58,60 @@ def test_kategori_pemasukan_tidak_boleh_untuk_pengeluaran(api, pengurus):
     res = api(pengurus).post("/api/v1/cash-entries/", {"kind": "pengeluaran", "category": "donasi", "description": "x", "amount": 1, "date": "2026-03-01"})
     assert res.status_code == 400
     assert "category" in res.data
+
+
+def _bayar(hh, pengurus, period="2026-01", paid=date(2026, 1, 5)):
+    generate_bills(period)
+    return record_payment(
+        household=hh, bill_ids=list(Bill.objects.filter(household=hh, period=period).values_list("pk", flat=True)),
+        method="transfer", paid_at=paid, user=pengurus,
+    )
+
+
+def test_buku_kas_pengurus_menampilkan_nama_dan_rumah(api, fees, hh_a, hh_b, pengurus):
+    _bayar(hh_a[0], pengurus)
+    _bayar(hh_b[0], pengurus)
+    _entry("pengeluaran", 10_000, date(2026, 1, 20), "kebersihan")
+    rows = api(pengurus).get("/api/v1/cash-entries/ledger/", {"year": 2026}).data
+    iuran = [r for r in rows if r["source"] == "iuran"]
+    assert {r["description"] for r in iuran} == {
+        "Iuran Budi Santoso (A-1) · Jan 2026 · transfer",
+        "Iuran Siti Aminah (B-2) · Jan 2026 · transfer",
+    }
+    assert rows[0]["description"] == "x"  # terbaru (20 Jan) lebih dulu
+    assert iuran[0]["household_id"] in (hh_a[0].pk, hh_b[0].pk)
+
+
+def test_buku_kas_warga_melihat_rincian_secara_default(api, fees, hh_a, hh_b, pengurus, warga):
+    _bayar(hh_a[0], pengurus)
+    _bayar(hh_b[0], pengurus)
+    rows = api(warga).get("/api/v1/cash-entries/ledger/", {"year": 2026}).data
+    assert {r["description"] for r in rows} == {
+        "Iuran Budi Santoso (A-1) · Jan 2026 · transfer",
+        "Iuran Siti Aminah (B-2) · Jan 2026 · transfer",
+    }
+
+
+def test_buku_kas_warga_hanya_ringkasan_bila_dimatikan(api, settings, fees, hh_a, hh_b, pengurus, warga):
+    settings.CASH_LEDGER_PUBLIC_DETAIL = False
+    _bayar(hh_a[0], pengurus)
+    _bayar(hh_b[0], pengurus)
+    rows = api(warga).get("/api/v1/cash-entries/ledger/", {"year": 2026}).data
+    assert len(rows) == 1
+    assert rows[0]["description"] == "Iuran warga bulan Januari (2 pembayaran)"
+    assert rows[0]["amount"] == 100_000
+    assert rows[0]["household_id"] is None
+    assert "Siti" not in str(rows)
+
+
+def test_buku_kas_filter_bulan_dan_jenis(api, fees, hh_a, pengurus):
+    _bayar(hh_a[0], pengurus)
+    _entry("pengeluaran", 10_000, date(2026, 2, 3))
+    assert len(api(pengurus).get("/api/v1/cash-entries/ledger/", {"year": 2026, "month": 2}).data) == 1
+    assert api(pengurus).get("/api/v1/cash-entries/ledger/", {"year": 2026, "kind": "pengeluaran"}).data[0]["amount"] == 10_000
+
+
+def test_periods_label():
+    from apps.finance.services import periods_label
+
+    assert periods_label(["2026-02", "2025-12", "2026-01", "2026-01"]) == "Des 2025, Jan, Feb 2026"

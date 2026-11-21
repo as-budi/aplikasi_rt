@@ -37,3 +37,28 @@ def test_warga_hanya_boleh_ekspor_kas(api, warga):
 def test_ekspor_tidak_dikenal(api, pengurus):
     assert api(pengurus).get("/api/v1/exports/rahasia/").status_code == 404
     assert api(pengurus).get("/api/v1/exports/cash/", {"file": "docx"}).status_code == 400
+
+
+@pytest.mark.parametrize("public", [True, False])
+def test_ekspor_kas_rincian_nama_sesuai_pengaturan(api, settings, pengurus, warga, fees, hh_a, public):
+    settings.CASH_LEDGER_PUBLIC_DETAIL = public
+    from datetime import date
+
+    from apps.dues.models import Bill
+    from apps.dues.services import record_payment
+
+    generate_bills("2026-01")
+    record_payment(household=hh_a[0], bill_ids=list(Bill.objects.values_list("pk", flat=True)), method="tunai", paid_at=date(2026, 1, 5), user=pengurus)
+
+    def cells(user):
+        res = api(user).get("/api/v1/exports/cash/", {"file": "xlsx", "year": 2026})
+        ws = load_workbook(BytesIO(res.content)).worksheets[1]
+        return [c.value for row in ws.iter_rows() for c in row]
+
+    assert "Iuran Budi Santoso (A-1) · Jan 2026 · tunai" in cells(pengurus)
+    warga_cells = cells(warga)
+    if public:
+        assert "Iuran Budi Santoso (A-1) · Jan 2026 · tunai" in warga_cells
+    else:
+        assert "Iuran warga bulan Januari (1 pembayaran)" in warga_cells
+        assert not any("Budi" in str(v) for v in warga_cells)

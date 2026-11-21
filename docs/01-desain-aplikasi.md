@@ -64,6 +64,7 @@ Catatan:
 - **Pemasukan iuran** dihitung otomatis dari pembayaran iuran (`Payment`, berdasarkan tanggal bayar), jadi tidak dicatat dua kali.
 - **Transaksi kas lain** dicatat pengurus: *pengeluaran* (kebersihan, keamanan, sosial, kegiatan, operasional, perbaikan, lainnya) dan *pemasukan lain* (saldo awal, donasi, lainnya). Nota/kuitansi bisa dilampirkan dan disimpan privat.
 - **Laporan kas per tahun:** saldo awal, pemasukan iuran, pemasukan lain, pengeluaran, dan saldo akhir per bulan, ditambah pengeluaran per kategori.
+- **Buku kas gabungan** (`/cash-entries/ledger/`) menampilkan transaksi kas dan pemasukan iuran dalam satu daftar. Setiap pembayaran iuran tampil dengan keterangan "Iuran {kepala keluarga} ({rumah}) · {bulan} · {metode}" untuk **semua warga** demi transparansi kas (keputusan pemilik proyek). Pengaturan `CASH_LEDGER_PUBLIC_DETAIL=False` di env backend mengembalikan mode privasi: warga hanya melihat ringkasan per bulan ("Iuran warga bulan November (6 pembayaran)"), sedangkan pengurus tetap melihat rinciannya. Aturan yang sama berlaku untuk ekspor laporan kas.
 - **Transparansi:** semua warga yang login bisa melihat laporan kas dan nota, tetapi hanya pengurus yang bisa mencatat transaksi.
 - Saldo kas tampil di Beranda semua peran.
 

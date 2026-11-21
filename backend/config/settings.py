@@ -117,6 +117,10 @@ SPECTACULAR_SETTINGS = {
     "SERVE_PERMISSIONS": ["rest_framework.permissions.AllowAny"] if DEBUG else ["rest_framework.permissions.IsAdminUser"],
 }
 
+# Buku kas: tampilkan iuran per rumah (nama & no. rumah) kepada SEMUA warga demi transparansi.
+# False = warga hanya melihat ringkasan iuran per bulan; pengurus tetap melihat rincian.
+CASH_LEDGER_PUBLIC_DETAIL = env.bool("CASH_LEDGER_PUBLIC_DETAIL", default=True)
+
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://redis:6379/0")
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=False)

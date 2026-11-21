@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { errMsg, fetchAll, http } from '@/api/http'
-import type { CashEntry, CashKind, CashReport } from '@/api/types'
+import { errMsg, http } from '@/api/http'
+import type { CashKind, CashReport, LedgerRow } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/stores/toast'
 import { currentPeriod, currentYear, dateLabel, monthShort, periodLabel, rp, todayISO } from '@/utils/format'
@@ -19,7 +19,7 @@ const years = [currentYear(), currentYear() - 1, currentYear() - 2]
 const month = ref<number | ''>('')
 const kind = ref<CashKind | ''>('')
 const report = ref<CashReport | null>(null)
-const entries = ref<CashEntry[]>([])
+const entries = ref<LedgerRow[]>([])
 const loading = ref(true)
 const error = ref('')
 
@@ -34,10 +34,10 @@ async function load() {
   try {
     const [r, e] = await Promise.all([
       http.get<CashReport>('/cash-entries/report/', { params: { year: year.value } }),
-      fetchAll<CashEntry>('/cash-entries/', { year: year.value, month: month.value || undefined, kind: kind.value || undefined }),
+      http.get<LedgerRow[]>('/cash-entries/ledger/', { params: { year: year.value, month: month.value || undefined, kind: kind.value || undefined } }),
     ])
     report.value = r.data
-    entries.value = e
+    entries.value = e.data
   } catch (e) {
     error.value = errMsg(e)
   } finally {
@@ -46,7 +46,7 @@ async function load() {
 }
 
 // ---------- Form transaksi (pengurus) ----------
-const modal = ref<{ open: boolean; entry?: CashEntry }>({ open: false })
+const modal = ref<{ open: boolean; entry?: LedgerRow }>({ open: false })
 const form = reactive({ kind: 'pengeluaran' as CashKind, category: 'kebersihan', description: '', amount: 0, date: todayISO() })
 const receipt = ref<File | null>(null)
 const formError = ref('')
@@ -58,7 +58,7 @@ watch(() => form.kind, (k) => {
   if (k === 'pengeluaran' && INCOME_ONLY.includes(form.category)) form.category = 'lainnya'
 })
 
-function openForm(entry?: CashEntry) {
+function openForm(entry?: LedgerRow) {
   modal.value = { open: true, entry }
   Object.assign(form, entry
     ? { kind: entry.kind, category: entry.category, description: entry.description, amount: entry.amount, date: entry.date }
@@ -87,7 +87,7 @@ async function save() {
   }
 }
 
-async function remove(entry: CashEntry) {
+async function remove(entry: LedgerRow) {
   if (!confirm(`Hapus transaksi "${entry.description}" (${rp(entry.amount)})?`)) return
   try {
     await http.delete(`/cash-entries/${entry.id}/`)
@@ -181,26 +181,35 @@ onMounted(load)
             </select>
           </div>
         </div>
-        <p class="mb-2 text-xs text-muted">Iuran warga tidak dicatat di sini; dihitung otomatis dari pembayaran iuran.</p>
+        <p class="mb-2 text-xs text-muted">
+          Iuran warga masuk otomatis dari pembayaran iuran (tanggal bayar/transfer), jadi tidak perlu dicatat manual.
+        </p>
         <p v-if="!entries.length" class="py-4 text-sm text-muted">Tidak ada transaksi.</p>
         <div class="list">
-          <div v-for="e in entries" :key="e.id" class="flex items-center gap-3 py-2.5">
+          <div v-for="e in entries" :key="`${e.source}-${e.id}`" class="flex items-center gap-3 py-2.5">
             <span
               class="grid size-9 flex-none place-items-center rounded-xl text-lg font-bold"
               :class="e.kind === 'pemasukan' ? 'bg-ok-soft text-ok' : 'bg-bad-soft text-bad'"
             >{{ e.kind === 'pemasukan' ? '+' : '−' }}</span>
             <div class="min-w-0 flex-1">
-              <b class="block truncate">{{ e.description }}</b>
+              <RouterLink
+                v-if="e.household_id && auth.isStaff"
+                :to="`/iuran?tab=riwayat&household=${e.household_id}`"
+                class="block font-bold hover:text-primary md:truncate"
+              >{{ e.description }}</RouterLink>
+              <b v-else class="block md:truncate">{{ e.description }}</b>
               <span class="text-sm text-muted">
                 {{ dateLabel(e.date) }} · {{ e.category_label }}
                 <a v-if="e.receipt_url" :href="e.receipt_url" target="_blank" rel="noopener" class="text-primary">· nota</a>
               </span>
             </div>
             <b class="whitespace-nowrap" :class="e.kind === 'pemasukan' ? 'text-ok' : 'text-bad'">{{ e.kind === 'pemasukan' ? '+' : '−' }}{{ rp(e.amount) }}</b>
-            <template v-if="auth.isStaff">
+            <template v-if="auth.isStaff && e.source === 'kas'">
               <button class="btn-icon" aria-label="Ubah" @click="openForm(e)"><AppIcon name="edit" :size="18" /></button>
               <button class="btn-icon" aria-label="Hapus" @click="remove(e)"><AppIcon name="x" :size="18" /></button>
             </template>
+            <!-- iuran tidak bisa diubah di sini; jaga kolom nominal tetap sejajar -->
+            <span v-else-if="auth.isStaff" class="w-[5.25rem] flex-none" aria-hidden="true" />
           </div>
         </div>
       </section>

@@ -2,13 +2,11 @@
 
 from dataclasses import dataclass, field
 
-from django.db.models import Sum
 from django.utils import timezone
 
-from apps.dues.models import Payment
 from apps.dues.services import bill_summary
 from apps.finance.models import CashEntry
-from apps.finance.services import cash_report
+from apps.finance.services import cash_report, ledger
 from apps.residents.models import Household, Resident
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
@@ -41,7 +39,7 @@ def _fmt_date(d) -> str:
     return f"{d.day} {MONTHS[d.month - 1]} {d.year}" if d else ""
 
 
-def residents_document(year: int | None = None) -> Document:
+def residents_document(year: int | None = None, private: bool = True) -> Document:
     households = Household.objects.filter(is_active=True).prefetch_related("members")
     rows = []
     for hh in households:
@@ -72,7 +70,7 @@ def residents_document(year: int | None = None) -> Document:
     )
 
 
-def dues_document(year: int) -> Document:
+def dues_document(year: int, private: bool = True) -> Document:
     data = bill_summary(year, include_private=True)
     today = timezone.localdate()
     periods = [p for p in data["periods"] if p <= today.strftime("%Y-%m")] if year == today.year else data["periods"]
@@ -98,7 +96,7 @@ def dues_document(year: int) -> Document:
     )
 
 
-def cash_document(year: int) -> Document:
+def cash_document(year: int, private: bool = False) -> Document:
     report = cash_report(year)
     today = timezone.localdate()
     last_month = today.month if year == today.year else 12
@@ -109,16 +107,15 @@ def cash_document(year: int) -> Document:
     ]
     t = report["totals"]
 
-    tx_rows = []
-    for e in CashEntry.objects.filter(date__year=year).order_by("date", "id"):
-        signed_in = e.amount if e.kind == CashEntry.Kind.IN else ""
-        signed_out = e.amount if e.kind == CashEntry.Kind.OUT else ""
-        tx_rows.append([_fmt_date(e.date), e.get_category_display(), e.description, signed_in, signed_out])
-    for m in months:  # iuran warga diringkas per bulan
-        month = int(m["period"][5:])
-        total = Payment.objects.filter(paid_at__year=year, paid_at__month=month).aggregate(s=Sum("total"))["s"] or 0
-        if total:
-            tx_rows.append([f"{MONTHS[month - 1]} {year}", "Iuran warga", f"Iuran warga bulan {MONTHS_LONG[month - 1]}", total, ""])
+    # Pengurus: iuran per rumah (nama & no. rumah); warga: iuran diringkas per bulan
+    tx_rows = [
+        [
+            _fmt_date(r["date"]), r["category_label"], r["description"],
+            r["amount"] if r["kind"] == CashEntry.Kind.IN else "",
+            r["amount"] if r["kind"] == CashEntry.Kind.OUT else "",
+        ]
+        for r in reversed(ledger(year, private=private))
+    ]
 
     return Document(
         title=f"Laporan Kas RT {year}",

@@ -271,3 +271,18 @@ export interface Registration {
   matching_household: { id: number; label: string; head_name: string } | null
   created_at: string
 }
+
+/** Baris buku kas gabungan: transaksi kas atau pemasukan iuran */
+export interface LedgerRow {
+  source: 'kas' | 'iuran'
+  id: number
+  kind: CashKind
+  category: string
+  category_label: string
+  description: string
+  amount: number
+  date: string
+  receipt_url: string | null
+  recorded_by_name: string | null
+  household_id: number | null
+}

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ChangeRequest, Household, Registration, Resident
+from .models import ChangeRequest, Document, Household, Registration, Resident
 
 
 class ResidentInline(admin.TabularInline):
@@ -38,3 +38,11 @@ class RegistrationAdmin(admin.ModelAdmin):
     list_filter = ("status",)
     exclude = ("payload",)  # data terenkripsi; ditinjau lewat aplikasi
     raw_id_fields = ("user", "reviewed_by", "household")
+
+
+@admin.register(Document)
+class DocumentAdmin(admin.ModelAdmin):
+    list_display = ("id", "kind", "household", "resident", "registration", "created_at")
+    list_filter = ("kind",)
+    raw_id_fields = ("household", "resident", "registration", "uploaded_by")
+    exclude = ("file",)  # file privat dibuka lewat aplikasi

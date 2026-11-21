@@ -20,6 +20,7 @@ router.register("payment-proofs", dues.PaymentProofViewSet, basename="payment-pr
 router.register("posts", posts.PostViewSet, basename="post")
 router.register("cash-entries", finance.CashEntryViewSet, basename="cash-entry")
 router.register("registrations", residents.RegistrationViewSet, basename="registration")
+router.register("documents", residents.DocumentViewSet, basename="document")
 
 urlpatterns = [
     path("auth/csrf/", accounts.csrf, name="auth-csrf"),

@@ -94,13 +94,18 @@ Setiap ekspor dicatat di log aktivitas. Berkas PDF memakai A4 (lanskap untuk tab
 - Login dengan username/no. HP/email + kata sandi. Akun warga dibuat oleh pengurus, atau warga **mendaftar sendiri** (lihat 3.5).
 
 ### 3.5 Pendaftaran warga baru
-1. Calon warga membuka **Daftar sebagai warga baru** dari halaman masuk. Formulirnya punya 4 langkah: akun (username, no. HP, kata sandi) → rumah & KK (termasuk status rumah) → data diri & anggota keluarga → periksa & setujui penggunaan data.
+1. Calon warga membuka **Daftar sebagai warga baru** dari halaman masuk. Formulirnya punya 4 langkah: akun (username, no. HP, kata sandi) → rumah & KK (termasuk status rumah, **wajib unggah foto/scan KK**) → data diri (**wajib unggah foto KTP pendaftar**) & anggota keluarga → periksa & setujui penggunaan data.
 2. Akun dibuat **nonaktif**. Data pendaftaran (termasuk NIK) disimpan terenkripsi. Jika pendaftar mencoba masuk, muncul pesan "menunggu aktivasi".
 3. Pengurus membuka **Pendaftaran Baru**, memeriksa data, lalu memilih salah satu:
    - **Aktifkan, buat KK baru**: rumah & anggota keluarga dibuat sesuai isian.
    - **Aktifkan, gabung ke KK yang sudah ada**: dipakai jika nomor rumah sudah terdaftar, misalnya anggota keluarga yang baru pindah masuk.
    - **Tolak dengan alasan**: alasannya ditampilkan saat pendaftar mencoba masuk.
-4. Setelah diproses, salinan data pendaftaran dihapus karena sudah dipindahkan ke data warga.
+4. Setelah diproses, salinan data pendaftaran dihapus karena sudah dipindahkan ke data warga. Foto KK/KTP **menjadi dokumen data induk** KK tersebut (KTP ditautkan ke pendaftar). Jika pendaftaran ditolak, foto KK/KTP ikut dihapus.
+
+### 3.7 Dokumen data induk (KK/KTP)
+- Setiap KK punya daftar dokumen (KK, KTP per anggota, lainnya) yang disimpan **privat**: hanya pengurus dan anggota KK itu sendiri yang bisa membuka file, lewat endpoint yang memeriksa hak akses (`X-Accel-Redirect` di produksi).
+- Pengurus melihat, mengunggah, dan menghapus dokumen di halaman detail KK. Warga melihat dokumennya di **Data Saya** dan bisa mengunggah KK/KTP terbaru, tetapi tidak bisa menghapus.
+- Format JPG/PNG/WEBP/PDF maks. 5 MB; foto diperkecil otomatis di HP sebelum diunggah. File di disk server belum dienkripsi, jadi lindungi akses server dan cadangan (backup).
 
 ### 3.6 Status rumah
 Setiap KK/rumah punya **status rumah**: *Menetap* (dihuni sehari-hari) atau *Rumah singgah* (hanya sesekali ditinggali). Status ini terpisah dari status hunian (pemilik/kontrak/kos). Status rumah tampil di daftar & detail warga, bisa difilter, dan ikut diekspor. Saat ini rumah singgah tetap ditagih iuran yang sama.
@@ -129,6 +134,7 @@ Nama tabel di bawah mengikuti model Django (tabel fisiknya berawalan nama app, m
 |---|---|
 | `User` (accounts) | username, first_name, phone, email, password, role (`admin`/`pengurus`/`warga`), resident (1-1), is_active |
 | `Household` (residents) | no_kk 🔒, block, house_number, address, occupancy (`pemilik`/`kontrak`/`kos`), residence_status (`menetap`/`singgah`), since, is_active, credit (saldo titipan) |
+| `Document` (residents) | kind (`kk`/`ktp`/`lainnya`), file 🔒, household, resident, registration, note, uploaded_by |
 | `Registration` (residents) | user (nonaktif s.d. disetujui), name, house_label, payload 🔒 (JSON rumah + anggota, dihapus setelah diproses), status, review_note, reviewed_by, household |
 | `CashEntry` (finance) | kind (`pemasukan`/`pengeluaran`), category, description, amount, date, receipt 🔒, recorded_by |
 | `Resident` (residents) | household, nik 🔒, name, gender, birth_place, birth_date, religion, marital_status, relation, occupation, phone, status (`aktif`/`pindah`/`meninggal`) |
@@ -223,7 +229,8 @@ Semua endpoint ada di bawah `/api/v1` (Django REST Framework) dan memakai sessio
 | GET | `/bills/prepay-options/?household=` (bulan bayar di muka, tarif, saldo titipan) | semua (warga: KK sendiri) |
 | GET | `/posts`, `/posts/{id}` | semua |
 | POST/PUT/DELETE | `/posts`, `/posts/{id}` | pengurus+ |
-| POST | `/auth/register/` | publik (dibatasi 5×/jam per IP) |
+| POST | `/auth/register/` (multipart: `data` JSON + `kk_file` + `ktp_file`) | publik (dibatasi 5×/jam per IP) |
+| GET/POST/DELETE | `/documents/`, `/documents/{id}/file/` | pengurus: semua; warga: KK sendiri (tanpa hapus) |
 | GET/POST | `/registrations/`, `/registrations/{id}/approve/` (opsional `household`), `/registrations/{id}/reject/` | pengurus+ |
 | GET | `/cash-entries/`, `/cash-entries/report/?year=`, `/cash-entries/{id}/receipt/` | semua |
 | POST/PATCH/DELETE | `/cash-entries/` | pengurus+ |

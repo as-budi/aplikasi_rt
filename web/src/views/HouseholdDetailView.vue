@@ -8,6 +8,8 @@ import { dateLabel, initials } from '@/utils/format'
 import { GENDER, OCCUPANCY, RELATION, RESIDENCE, RESIDENT_STATUS } from '@/utils/labels'
 import AppIcon from '@/components/AppIcon.vue'
 import BaseModal from '@/components/BaseModal.vue'
+import DocumentList from '@/components/DocumentList.vue'
+import DocumentUpload from '@/components/DocumentUpload.vue'
 import HouseholdForm from '@/components/HouseholdForm.vue'
 import LoadState from '@/components/LoadState.vue'
 import ResidentForm from '@/components/ResidentForm.vue'
@@ -23,6 +25,7 @@ const loading = ref(true)
 const error = ref('')
 
 const editingHousehold = ref(false)
+const uploadingDoc = ref(false)
 const residentModal = ref<{ open: boolean; resident?: Resident }>({ open: false })
 const accountFor = ref<Resident | null>(null)
 const account = reactive({ username: '', password: '' })
@@ -162,6 +165,18 @@ onMounted(load)
           </div>
         </div>
       </section>
+
+      <section class="card mt-4">
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="text-[15px] font-semibold">Dokumen data induk (KK/KTP)</h2>
+          <button class="btn btn-sm" @click="uploadingDoc = true"><AppIcon name="upload" :size="16" />Unggah</button>
+        </div>
+        <DocumentList :documents="hh.documents" can-delete @deleted="load" />
+      </section>
+
+      <BaseModal :open="uploadingDoc" title="Unggah dokumen KK/KTP" @close="uploadingDoc = false">
+        <DocumentUpload v-if="uploadingDoc" :household-id="hh.id" :members="hh.members" @uploaded="uploadingDoc = false; toast.ok('Dokumen tersimpan'); load()" />
+      </BaseModal>
 
       <BaseModal :open="editingHousehold" title="Ubah data KK" @close="editingHousehold = false">
         <HouseholdForm v-if="editingHousehold" :initial="hh" @saved="onHouseholdSaved" />

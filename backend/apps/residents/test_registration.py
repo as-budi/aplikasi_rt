@@ -1,4 +1,7 @@
+import json
+
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
@@ -26,12 +29,24 @@ def payload(**overrides):
     return data
 
 
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+
+
+def submit(data=None, kk=True, ktp=True):
+    body = {"data": json.dumps(data if data is not None else payload())}
+    if kk:
+        body["kk_file"] = SimpleUploadedFile("kk.jpg", PNG, content_type="image/jpeg")
+    if ktp:
+        body["ktp_file"] = SimpleUploadedFile("ktp.png", PNG, content_type="image/png")
+    return APIClient().post("/api/v1/auth/register/", body, format="multipart")
+
+
 def login(username, password="kuat-sekali-77"):
     return APIClient().post("/api/v1/auth/login/", {"identifier": username, "password": password})
 
 
 def test_daftar_lalu_menunggu_aktivasi():
-    res = APIClient().post("/api/v1/auth/register/", payload(), format="json")
+    res = submit(payload())
     assert res.status_code == 201, res.data
     user = User.objects.get(username="andi")
     assert user.is_active is False
@@ -43,7 +58,7 @@ def test_daftar_lalu_menunggu_aktivasi():
 
 
 def test_data_pendaftaran_terenkripsi_dan_hanya_untuk_pengurus(api, warga, pengurus):
-    APIClient().post("/api/v1/auth/register/", payload(), format="json")
+    submit(payload())
     reg = Registration.objects.get()
     from django.db import connection
 
@@ -56,7 +71,7 @@ def test_data_pendaftaran_terenkripsi_dan_hanya_untuk_pengurus(api, warga, pengu
 
 
 def test_aktivasi_membuat_kk_dan_akun_bisa_login(api, pengurus):
-    APIClient().post("/api/v1/auth/register/", payload(), format="json")
+    submit(payload())
     reg = Registration.objects.get()
     res = api(pengurus).post(f"/api/v1/registrations/{reg.pk}/approve/")
     assert res.status_code == 200, res.data
@@ -72,7 +87,7 @@ def test_aktivasi_membuat_kk_dan_akun_bisa_login(api, pengurus):
 
 def test_aktivasi_bergabung_ke_kk_yang_sudah_ada(api, pengurus, hh_a):
     hh, _ = hh_a
-    APIClient().post("/api/v1/auth/register/", payload(household={**payload()["household"], "block": "A", "house_number": "1"}), format="json")
+    submit(payload(household={**payload()["household"], "block": "A", "house_number": "1"}))
     reg = Registration.objects.get()
     detail = api(pengurus).get(f"/api/v1/registrations/{reg.pk}/").data
     assert detail["matching_household"]["id"] == hh.pk
@@ -85,7 +100,7 @@ def test_aktivasi_bergabung_ke_kk_yang_sudah_ada(api, pengurus, hh_a):
 
 
 def test_tolak_pendaftaran_dengan_alasan(api, pengurus):
-    APIClient().post("/api/v1/auth/register/", payload(), format="json")
+    submit(payload())
     reg = Registration.objects.get()
     assert api(pengurus).post(f"/api/v1/registrations/{reg.pk}/reject/").status_code == 400
     api(pengurus).post(f"/api/v1/registrations/{reg.pk}/reject/", {"review_note": "Bukan warga RT 05"})
@@ -95,14 +110,13 @@ def test_tolak_pendaftaran_dengan_alasan(api, pengurus):
 
 
 def test_validasi_pendaftaran(hh_a, warga):
-    client = APIClient()
-    assert client.post("/api/v1/auth/register/", payload(consent=False), format="json").status_code == 400
-    assert client.post("/api/v1/auth/register/", payload(members=[]), format="json").status_code == 400
-    assert client.post("/api/v1/auth/register/", payload(username="budi"), format="json").data["username"]
-    assert client.post("/api/v1/auth/register/", payload(password="123"), format="json").data["password"]
+    assert submit(payload(consent=False)).status_code == 400
+    assert submit(payload(members=[])).status_code == 400
+    assert submit(payload(username="budi")).data["username"]
+    assert submit(payload(password="123")).data["password"]
     bad_nik = payload()
     bad_nik["members"][0]["nik"] = "12ab"
-    assert client.post("/api/v1/auth/register/", bad_nik, format="json").status_code == 400
+    assert submit(bad_nik).status_code == 400
 
 
 def test_filter_status_rumah(api, pengurus, hh_a, hh_b):
@@ -110,3 +124,64 @@ def test_filter_status_rumah(api, pengurus, hh_a, hh_b):
     hh_b[0].save()
     res = api(pengurus).get("/api/v1/households/", {"residence_status": "singgah"})
     assert [h["label"] for h in res.data["results"]] == ["B-2"]
+
+
+def test_pendaftaran_wajib_unggah_kk_dan_ktp():
+    no_kk = submit(kk=False)
+    assert no_kk.status_code == 400 and "kk_file" in no_kk.data
+    no_ktp = submit(ktp=False)
+    assert no_ktp.status_code == 400 and "ktp_file" in no_ktp.data
+    assert not User.objects.exists()
+
+
+def test_dokumen_pendaftaran_jadi_data_induk_setelah_aktivasi(api, pengurus, warga):
+    from apps.residents.models import Document
+
+    submit()
+    reg = Registration.objects.get()
+    detail = api(pengurus).get(f"/api/v1/registrations/{reg.pk}/").data
+    assert sorted(d["kind"] for d in detail["documents"]) == ["kk", "ktp"]
+    kk_url = next(d["file_url"] for d in detail["documents"] if d["kind"] == "kk")
+    assert api(pengurus).get(kk_url).status_code == 200
+    assert api(warga).get(kk_url).status_code == 404  # warga lain tidak bisa membuka
+
+    api(pengurus).post(f"/api/v1/registrations/{reg.pk}/approve/")
+    hh = Household.objects.get(block="D", house_number="7")
+    assert hh.documents.count() == 2
+    assert Document.objects.get(kind="ktp").resident.name == "Andi Saputra"
+
+    andi = APIClient()
+    andi.force_authenticate(User.objects.get(username="andi"))
+    own = andi.get("/api/v1/me/household/").data["documents"]
+    assert len(own) == 2
+    assert andi.get(own[0]["file_url"]).status_code == 200
+
+
+def test_tolak_pendaftaran_menghapus_dokumen(api, pengurus):
+    from apps.residents.models import Document
+
+    submit()
+    reg = Registration.objects.get()
+    files = [d.file.name for d in Document.objects.all()]
+    storage = Document.objects.first().file.storage
+    api(pengurus).post(f"/api/v1/registrations/{reg.pk}/reject/", {"review_note": "Data tidak lengkap"})
+    assert not Document.objects.exists()
+    assert not any(storage.exists(f) for f in files)
+
+
+def test_unggah_dokumen_warga_dan_pengurus(api, warga, warga_b, pengurus, hh_a, hh_b):
+    up = lambda: SimpleUploadedFile("kk-baru.png", PNG, content_type="image/png")  # noqa: E731
+    res = api(warga).post("/api/v1/documents/", {"kind": "kk", "file": up(), "note": "KK terbaru"}, format="multipart")
+    assert res.status_code == 201, res.data
+    assert res.data["household"] == hh_a[0].pk
+    # warga tidak bisa menautkan ke anggota KK lain, tidak bisa menghapus, tidak bisa melihat dokumen KK lain
+    bad = api(warga).post("/api/v1/documents/", {"kind": "ktp", "file": up(), "resident": hh_b[1].pk}, format="multipart")
+    assert bad.status_code == 400
+    assert api(warga).delete(f"/api/v1/documents/{res.data['id']}/").status_code == 403
+    assert api(warga_b).get(res.data["file_url"]).status_code == 404
+    # pengurus mengunggah untuk KK tertentu lalu menghapus
+    staff = api(pengurus).post("/api/v1/documents/", {"kind": "ktp", "file": up(), "household": hh_b[0].pk, "resident": hh_b[1].pk}, format="multipart")
+    assert staff.status_code == 201 and staff.data["household"] == hh_b[0].pk
+    assert api(pengurus).delete(f"/api/v1/documents/{staff.data['id']}/").status_code == 204
+    exe = api(warga).post("/api/v1/documents/", {"kind": "kk", "file": SimpleUploadedFile("x.exe", b"MZ")}, format="multipart")
+    assert exe.status_code == 400

@@ -7,6 +7,8 @@ import { dateLabel, initials } from '@/utils/format'
 import { CHANGE_FIELD, GENDER, MARITAL, OCCUPANCY, RELATION, RELIGIONS, RESIDENCE } from '@/utils/labels'
 import AppIcon from '@/components/AppIcon.vue'
 import BaseModal from '@/components/BaseModal.vue'
+import DocumentList from '@/components/DocumentList.vue'
+import DocumentUpload from '@/components/DocumentUpload.vue'
 import LoadState from '@/components/LoadState.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 
@@ -22,6 +24,7 @@ const formError = ref('')
 const busy = ref(false)
 
 const noteOpen = ref(false)
+const docOpen = ref(false)
 const note = ref('')
 
 async function load() {
@@ -122,6 +125,19 @@ onMounted(load)
           </div>
         </div>
       </section>
+
+      <section class="card mb-4">
+        <div class="mb-3 flex items-center justify-between gap-2">
+          <h2 class="text-[15px] font-semibold">Dokumen KK/KTP</h2>
+          <button class="btn btn-sm" @click="docOpen = true"><AppIcon name="upload" :size="16" />Unggah</button>
+        </div>
+        <p class="mb-3 text-xs text-muted">Hanya Anda dan pengurus RT yang bisa melihat dokumen ini.</p>
+        <DocumentList :documents="hh.documents" />
+      </section>
+
+      <BaseModal :open="docOpen" title="Unggah KK/KTP terbaru" @close="docOpen = false">
+        <DocumentUpload v-if="docOpen" :members="hh.members" @uploaded="docOpen = false; toast.ok('Dokumen terkirim'); load()" />
+      </BaseModal>
 
       <section class="card">
         <h2 class="card-title">Riwayat pengajuan</h2>

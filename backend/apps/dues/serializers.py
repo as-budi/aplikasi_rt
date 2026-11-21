@@ -1,14 +1,10 @@
-import os
-
-from django.conf import settings
 from django.urls import reverse
 from rest_framework import serializers
 
+from apps.core.files import validate_private_upload
 from apps.residents.models import Household
 
 from .models import Bill, FeeType, Payment, PaymentProof
-
-ALLOWED_PROOF_EXT = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
 
 
 class FeeTypeSerializer(serializers.ModelSerializer):
@@ -79,12 +75,7 @@ class PaymentProofCreateSerializer(_BillSelectionMixin):
     note = serializers.CharField(required=False, allow_blank=True, max_length=255, default="")
 
     def validate_file(self, f):
-        ext = os.path.splitext(f.name)[1].lower()
-        if ext not in ALLOWED_PROOF_EXT:
-            raise serializers.ValidationError("Format file harus JPG, PNG, WEBP, atau PDF.")
-        if f.size > settings.MAX_UPLOAD_SIZE:
-            raise serializers.ValidationError("Ukuran file maksimal 5 MB.")
-        return f
+        return validate_private_upload(f, "File")
 
 
 class PaymentProofSerializer(serializers.ModelSerializer):

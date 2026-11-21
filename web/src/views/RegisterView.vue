@@ -4,6 +4,7 @@ import { errMsg, http } from '@/api/http'
 import type { RegisterMember } from '@/api/types'
 import { GENDER, MARITAL, OCCUPANCY, RELATION, RELIGIONS, RESIDENCE, RESIDENCE_HINT } from '@/utils/labels'
 import AppIcon from '@/components/AppIcon.vue'
+import { compressImage } from '@/utils/image'
 
 const step = ref(1)
 const STEPS = ['Akun', 'Rumah', 'Keluarga', 'Kirim']
@@ -20,6 +21,29 @@ const blankMember = (relation: string): RegisterMember => ({
 })
 const members = ref<RegisterMember[]>([blankMember('kepala_keluarga')])
 const consent = ref(false)
+const kkFile = ref<File | null>(null)
+const ktpFile = ref<File | null>(null)
+const kkPreview = ref('')
+const ktpPreview = ref('')
+
+async function pick(e: Event, target: 'kk' | 'ktp') {
+  const f = (e.target as HTMLInputElement).files?.[0]
+  if (!f) return
+  const file = await compressImage(f)
+  if (file.size > 5 * 1024 * 1024) {
+    error.value = 'Ukuran file maksimal 5 MB.'
+    return
+  }
+  error.value = ''
+  const url = file.type.startsWith('image/') ? URL.createObjectURL(file) : ''
+  if (target === 'kk') {
+    kkFile.value = file
+    kkPreview.value = url
+  } else {
+    ktpFile.value = file
+    ktpPreview.value = url
+  }
+}
 
 const RELATIONS_OTHER = computed(() => Object.entries(RELATION).filter(([k]) => k !== 'kepala_keluarga'))
 
@@ -29,6 +53,8 @@ function next() {
     if (account.password !== account.confirm) return (error.value = 'Konfirmasi kata sandi tidak sama.')
     if (account.password.length < 8) return (error.value = 'Kata sandi minimal 8 karakter.')
   }
+  if (step.value === 2 && !kkFile.value) return (error.value = 'Unggah foto Kartu Keluarga.')
+  if (step.value === 3 && !ktpFile.value) return (error.value = 'Unggah foto KTP Anda.')
   step.value++
   window.scrollTo(0, 0)
 }
@@ -38,7 +64,8 @@ async function submit() {
   busy.value = true
   try {
     await http.get('/auth/csrf/')
-    await http.post('/auth/register/', {
+    const fd = new FormData()
+    fd.append('data', JSON.stringify({
       username: account.username.trim(),
       phone: account.phone.trim(),
       email: account.email.trim(),
@@ -46,7 +73,10 @@ async function submit() {
       consent: consent.value,
       household: { ...household, since: household.since || null },
       members: members.value.map((m) => ({ ...m, birth_date: m.birth_date || null })),
-    })
+    }))
+    if (kkFile.value) fd.append('kk_file', kkFile.value)
+    if (ktpFile.value) fd.append('ktp_file', ktpFile.value)
+    await http.post('/auth/register/', fd)
     done.value = true
   } catch (e) {
     error.value = errMsg(e, 'Pendaftaran gagal. Periksa kembali data Anda.')
@@ -122,6 +152,16 @@ async function submit() {
             </label>
           </div>
         </fieldset>
+        <label class="field">
+          <span>Foto / scan Kartu Keluarga *</span>
+          <span class="flex cursor-pointer flex-col items-center gap-1 rounded-xl border-2 border-dashed border-line p-4 text-center text-sm text-muted hover:border-primary hover:text-primary">
+            <img v-if="kkPreview" :src="kkPreview" alt="Pratinjau KK" class="mb-1 max-h-40 rounded-lg" />
+            <AppIcon v-else name="upload" :size="24" />
+            {{ kkFile ? kkFile.name : 'Ketuk untuk foto atau pilih file (JPG/PNG/PDF, maks. 5 MB)' }}
+            <input type="file" accept="image/*,application/pdf" class="sr-only" @change="pick($event, 'kk')" />
+          </span>
+        </label>
+        <p v-if="error" class="mb-3 text-sm text-bad" role="alert">{{ error }}</p>
         <div class="flex gap-2">
           <button type="button" class="btn flex-1" @click="step--">Kembali</button>
           <button class="btn btn-primary flex-[2]">Lanjut</button>
@@ -162,7 +202,17 @@ async function submit() {
             <label class="field"><span>Pekerjaan</span><input v-model="m.occupation" class="input" maxlength="60" /></label>
             <label class="field"><span>No. HP</span><input v-model="m.phone" class="input" type="tel" maxlength="20" /></label>
           </div>
+          <label v-if="i === 0" class="field">
+            <span>Foto KTP Anda *</span>
+            <span class="flex cursor-pointer flex-col items-center gap-1 rounded-xl border-2 border-dashed border-line p-4 text-center text-sm text-muted hover:border-primary hover:text-primary">
+              <img v-if="ktpPreview" :src="ktpPreview" alt="Pratinjau KTP" class="mb-1 max-h-32 rounded-lg" />
+              <AppIcon v-else name="upload" :size="24" />
+              {{ ktpFile ? ktpFile.name : 'Ketuk untuk foto atau pilih file' }}
+              <input type="file" accept="image/*,application/pdf" class="sr-only" @change="pick($event, 'ktp')" />
+            </span>
+          </label>
         </section>
+        <p v-if="error" class="mb-3 text-sm text-bad" role="alert">{{ error }}</p>
         <button v-if="members.length < 15" type="button" class="btn mb-4 w-full" @click="members.push(blankMember('anak'))">
           <AppIcon name="plus" :size="18" />Tambah anggota keluarga
         </button>
@@ -186,10 +236,11 @@ async function submit() {
             <dt class="text-muted">Anggota keluarga</dt>
             <dd class="text-right font-semibold">{{ members.map((m) => m.name).join(', ') }}</dd>
           </div>
+          <div class="flex justify-between gap-4 py-2"><dt class="text-muted">Dokumen</dt><dd class="font-semibold">KK ✓ · KTP ✓</dd></div>
         </dl>
         <label class="mb-4 flex gap-3 rounded-xl bg-surface-2 p-3 text-sm">
           <input v-model="consent" type="checkbox" required class="mt-0.5 accent-[var(--c-primary)]" />
-          <span>Saya menyatakan data di atas benar dan menyetujui data ini disimpan serta digunakan oleh pengurus RT hanya untuk keperluan administrasi warga.</span>
+          <span>Saya menyatakan data di atas benar dan menyetujui data serta foto KK/KTP ini disimpan dan digunakan oleh pengurus RT hanya untuk keperluan administrasi warga.</span>
         </label>
         <p v-if="error" class="mb-3 text-sm text-bad" role="alert">{{ error }}</p>
         <div class="flex gap-2">

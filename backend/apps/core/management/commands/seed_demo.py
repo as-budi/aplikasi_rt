@@ -60,6 +60,19 @@ def proof_image(label: str, amount: int) -> ContentFile:
     return ContentFile(buf.getvalue(), name="bukti.png")
 
 
+def document_image(title: str, lines: list[str]) -> ContentFile:
+    """Gambar contoh pengganti foto KK/KTP (bukan dokumen asli)."""
+    img = Image.new("RGB", (900, 560), (235, 244, 250))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((0, 0, 900, 90), fill=(15, 118, 110))
+    draw.text((30, 25), f"{title} — CONTOH", fill="white", font=ImageFont.load_default(size=34))
+    for i, line in enumerate(lines):
+        draw.text((30, 130 + i * 48), line, fill="black", font=ImageFont.load_default(size=26))
+    buf = BytesIO()
+    img.save(buf, "JPEG", quality=80)
+    return ContentFile(buf.getvalue(), name=f"{title.lower().replace(' ', '-')}.jpg")
+
+
 class Command(BaseCommand):
     help = "Isi data contoh: 8 KK, akun admin/pengurus/warga, iuran tahun berjalan, berita."
 
@@ -110,7 +123,10 @@ class Command(BaseCommand):
                      "birth_place": "Bogor", "birth_date": date(1992, 9, 8), "religion": "Islam",
                      "marital_status": "Kawin", "occupation": "Perawat", "phone": ""},
                 ],
-            })
+            },
+                kk_file=document_image("KARTU KELUARGA", ["No. KK : 3201000000000009", "Kepala : ANDI SAPUTRA", "Alamat : Blok C No. 3"]),
+                ktp_file=document_image("KTP", ["NIK  : 3201091504900001", "Nama : ANDI SAPUTRA", "Lahir: Bandung, 15-04-1990"]),
+            )
             self.stdout.write("Pendaftaran warga baru contoh (andi, menunggu aktivasi) dibuat.")
 
     def seed_core(self):

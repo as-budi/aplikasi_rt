@@ -6,6 +6,7 @@ import { useToast } from '@/stores/toast'
 import { dateLabel } from '@/utils/format'
 import { GENDER, OCCUPANCY, RELATION, RESIDENCE } from '@/utils/labels'
 import BaseModal from '@/components/BaseModal.vue'
+import DocumentList from '@/components/DocumentList.vue'
 import LoadState from '@/components/LoadState.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import HouseholdPicker from './dues/HouseholdPicker.vue'
@@ -124,6 +125,9 @@ onMounted(load)
         <div><dt class="text-muted">Akun</dt><dd class="font-semibold">@{{ current.username }} · {{ current.phone }}</dd></div>
         <div v-if="current.data.household.address" class="col-span-full"><dt class="text-muted">Alamat</dt><dd class="font-semibold">{{ current.data.household.address }}</dd></div>
       </dl>
+
+      <h3 class="mb-2 text-sm font-semibold">Dokumen (cocokkan dengan isian)</h3>
+      <div class="mb-4"><DocumentList :documents="current.documents" /></div>
 
       <h3 class="mb-1 text-sm font-semibold">Anggota keluarga</h3>
       <div class="list mb-4">

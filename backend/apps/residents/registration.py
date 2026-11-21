@@ -10,7 +10,7 @@ from rest_framework.exceptions import ValidationError
 from apps.accounts.models import User
 from apps.core.models import audit
 
-from .models import Household, Registration, Resident
+from .models import Document, Household, Registration, Resident
 
 MEMBER_FIELDS = (
     "name", "nik", "gender", "birth_place", "birth_date", "religion",
@@ -32,8 +32,8 @@ def matching_household(label_block: str, label_number: str):
 
 
 @transaction.atomic
-def register(data: dict) -> Registration:
-    """Buat akun NONAKTIF + data pendaftaran terenkripsi. members[0] adalah pendaftar sendiri."""
+def register(data: dict, kk_file=None, ktp_file=None) -> Registration:
+    """Buat akun NONAKTIF + data pendaftaran terenkripsi + dokumen KK/KTP. members[0] adalah pendaftar sendiri."""
     household, members = data["household"], data["members"]
     user = User.objects.create_user(
         username=data["username"], password=data["password"], phone=data["phone"], email=data.get("email", ""),
@@ -47,6 +47,10 @@ def register(data: dict) -> Registration:
         user=user, name=members[0]["name"], house_label=f"{household['block']}-{household['house_number']}",
         payload=json.dumps(payload),
     )
+    for kind, f in ((Document.Kind.KK, kk_file), (Document.Kind.KTP, ktp_file)):
+        if f:
+            Document.objects.create(registration=registration, kind=kind, file=f, uploaded_by=user,
+                                    note="KTP pendaftar" if kind == Document.Kind.KTP else "")
     audit(None, "pendaftaran_baru", registration)
     return registration
 
@@ -78,6 +82,12 @@ def approve(reg: Registration, reviewer, household: Household | None = None) -> 
         for m in data["members"]
     ]
 
+    # Dokumen pendaftaran menjadi data induk KK; KTP ditautkan ke pendaftar
+    for doc in reg.documents.all():
+        doc.household = household
+        doc.resident = residents[0] if doc.kind == Document.Kind.KTP else None
+        doc.save(update_fields=["household", "resident"])
+
     user = reg.user
     user.resident = residents[0]
     user.is_active = True
@@ -99,6 +109,8 @@ def reject(reg: Registration, reviewer, note: str) -> Registration:
         raise ValidationError("Pendaftaran ini sudah diproses.")
     if not (note or "").strip():
         raise ValidationError({"review_note": "Tuliskan alasan penolakan; alasan ini ditampilkan saat pendaftar mencoba masuk."})
+    for doc in reg.documents.all():  # data pribadi tidak disimpan bila ditolak
+        doc.delete()
     reg.status = Registration.Status.REJECTED
     reg.review_note = note
     reg.reviewed_by = reviewer

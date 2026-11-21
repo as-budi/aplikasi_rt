@@ -183,3 +183,46 @@ class Registration(models.Model):
         import json
 
         return json.loads(self.payload) if self.payload else {}
+
+
+def document_upload_to(instance, filename):
+    import os
+    import uuid
+
+    from django.utils import timezone
+
+    ext = os.path.splitext(filename)[1].lower()
+    return f"documents/{timezone.now():%Y/%m}/{uuid.uuid4().hex}{ext}"
+
+
+class Document(models.Model):
+    """Dokumen data induk (scan/foto KK, KTP). File privat, hanya untuk pengurus & KK pemiliknya."""
+
+    class Kind(models.TextChoices):
+        KK = "kk", "Kartu Keluarga"
+        KTP = "ktp", "KTP"
+        LAINNYA = "lainnya", "Lainnya"
+
+    kind = models.CharField("Jenis", max_length=10, choices=Kind.choices)
+    file = models.FileField("File", upload_to=document_upload_to)
+    household = models.ForeignKey(Household, null=True, blank=True, on_delete=models.CASCADE, related_name="documents")
+    resident = models.ForeignKey(Resident, null=True, blank=True, on_delete=models.SET_NULL, related_name="documents")
+    registration = models.ForeignKey("Registration", null=True, blank=True, on_delete=models.CASCADE, related_name="documents")
+    note = models.CharField("Keterangan", max_length=150, blank=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["kind", "-created_at"]
+        verbose_name = "Dokumen warga"
+        verbose_name_plural = "Dokumen warga"
+
+    def __str__(self):
+        return f"{self.get_kind_display()} #{self.pk}"
+
+    def delete(self, *args, **kwargs):
+        storage, name = self.file.storage, self.file.name
+        result = super().delete(*args, **kwargs)
+        if name:
+            storage.delete(name)
+        return result

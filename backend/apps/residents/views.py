@@ -1,3 +1,5 @@
+import json
+
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Prefetch
@@ -7,20 +9,23 @@ from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.accounts.models import User
+from apps.core.files import protected_file_response, validate_private_upload
 from apps.core.models import audit
 from apps.core.permissions import IsStaffRT, is_staff_rt
 from apps.core.utils import current_period
 from apps.dues.models import Bill
 
 from . import registration, services
-from .models import ChangeRequest, Household, Registration, Resident
+from .models import ChangeRequest, Document, Household, Registration, Resident
 from .serializers import (
     ChangeRequestSerializer,
+    DocumentSerializer,
     HouseholdDetailSerializer,
     HouseholdListSerializer,
     HouseholdOwnSerializer,
@@ -187,10 +192,26 @@ class RegisterView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "register"
 
+    parser_classes = [MultiPartParser, FormParser]
+
     def post(self, request):
-        ser = RegisterSerializer(data=request.data)
+        """multipart: `data` = JSON pendaftaran, `kk_file` = foto/scan KK, `ktp_file` = foto KTP pendaftar."""
+        try:
+            payload = json.loads(request.data.get("data") or "{}")
+        except ValueError:
+            raise ValidationError({"data": "Format data tidak valid."})
+        ser = RegisterSerializer(data=payload)
         ser.is_valid(raise_exception=True)
-        registration.register(ser.validated_data)
+        files = {}
+        for field, label in (("kk_file", "Foto Kartu Keluarga"), ("ktp_file", "Foto KTP")):
+            f = request.FILES.get(field)
+            if not f:
+                raise ValidationError({field: f"{label} wajib diunggah."})
+            try:
+                files[field] = validate_private_upload(f, label)
+            except ValidationError as e:
+                raise ValidationError({field: e.detail})
+        registration.register(ser.validated_data, **files)
         return Response(
             {"detail": "Pendaftaran terkirim. Anda bisa masuk setelah akun diaktifkan oleh pengurus RT."},
             status=status.HTTP_201_CREATED,
@@ -217,3 +238,47 @@ class RegistrationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
     def reject(self, request, pk=None):
         reg = registration.reject(self.get_object(), request.user, request.data.get("review_note", ""))
         return Response(self.get_serializer(reg).data)
+
+
+class DocumentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
+                      mixins.DestroyModelMixin, viewsets.GenericViewSet):
+    """Dokumen KK/KTP. Pengurus: semua; warga: dokumen KK sendiri (boleh mengunggah, tidak boleh menghapus)."""
+
+    serializer_class = DocumentSerializer
+    filterset_fields = ["household", "kind", "registration"]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = Document.objects.select_related("resident", "uploaded_by")
+        if not user.is_authenticated:  # pembuatan skema OpenAPI
+            return qs.none()
+        if is_staff_rt(user):
+            return qs
+        return qs.filter(household=user.household) if user.household else qs.none()
+
+    def get_permissions(self):
+        if self.action == "destroy":
+            return [IsStaffRT()]
+        return super().get_permissions()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if is_staff_rt(user) and self.request.data.get("household"):
+            household = get_object_or_404(Household, pk=self.request.data["household"])
+        else:
+            household = user.household
+        if not household:
+            raise ValidationError("Akun Anda belum terhubung ke data warga.")
+        resident = serializer.validated_data.get("resident")
+        if resident and resident.household_id != household.pk:
+            raise ValidationError({"resident": "Anggota keluarga tidak ditemukan di KK ini."})
+        doc = serializer.save(household=household, uploaded_by=user)
+        audit(user, "unggah_dokumen", doc, household=household.pk, kind=doc.kind)
+
+    def perform_destroy(self, instance):
+        audit(self.request.user, "hapus_dokumen", instance, household=instance.household_id, kind=instance.kind)
+        instance.delete()
+
+    @action(detail=True, methods=["get"])
+    def file(self, request, pk=None):
+        return protected_file_response(self.get_object().file)

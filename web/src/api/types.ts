@@ -67,6 +67,7 @@ export interface HouseholdDetail extends HouseholdListItem {
   no_kk: string
   since: string | null
   members: Resident[]
+  documents: ResidentDocument[]
   created_at: string
 }
 
@@ -82,6 +83,7 @@ export interface HouseholdOwn {
   no_kk_masked: string
   credit: number
   members: Resident[]
+  documents: ResidentDocument[]
 }
 
 export interface HouseholdWrite {
@@ -274,6 +276,7 @@ export interface Registration {
     members?: RegisterMember[]
   }
   matching_household: { id: number; label: string; head_name: string } | null
+  documents: ResidentDocument[]
   created_at: string
 }
 
@@ -298,4 +301,19 @@ export interface PrepayOptions {
   fees: { name: string; amount: number }[]
   monthly_total: number
   credit: number
+}
+
+/** Dokumen data induk (KK/KTP), file privat */
+export interface ResidentDocument {
+  id: number
+  kind: 'kk' | 'ktp' | 'lainnya'
+  kind_label: string
+  household: number | null
+  resident: number | null
+  resident_name: string | null
+  note: string
+  file_url: string
+  file_type: 'image' | 'pdf'
+  uploaded_by_name: string | null
+  created_at: string
 }

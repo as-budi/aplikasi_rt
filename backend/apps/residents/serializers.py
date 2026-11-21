@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from apps.core.utils import aggregate_status, mask
 
-from .models import ChangeRequest, Household, Registration, Resident
+from .models import ChangeRequest, Document, Household, Registration, Resident
 
 DIGITS_16 = re.compile(r"^\d{16}$")
 
@@ -107,9 +107,13 @@ class HouseholdListSerializer(serializers.ModelSerializer):
 
 class HouseholdDetailSerializer(HouseholdListSerializer):
     members = ResidentSerializer(many=True, read_only=True)
+    documents = serializers.SerializerMethodField()
 
     class Meta(HouseholdListSerializer.Meta):
-        fields = HouseholdListSerializer.Meta.fields + ["no_kk", "since", "members", "created_at"]
+        fields = HouseholdListSerializer.Meta.fields + ["no_kk", "since", "members", "documents", "created_at"]
+
+    def get_documents(self, obj) -> list:
+        return DocumentSerializer(obj.documents.select_related("resident", "uploaded_by"), many=True).data
 
 
 class HouseholdWriteSerializer(serializers.ModelSerializer):
@@ -135,10 +139,14 @@ class HouseholdOwnSerializer(serializers.ModelSerializer):
     label = serializers.CharField(read_only=True)
     no_kk_masked = serializers.SerializerMethodField()
     members = ResidentOwnSerializer(many=True, read_only=True)
+    documents = serializers.SerializerMethodField()
 
     class Meta:
         model = Household
-        fields = ["id", "label", "block", "house_number", "address", "occupancy", "residence_status", "since", "no_kk_masked", "credit", "members"]
+        fields = ["id", "label", "block", "house_number", "address", "occupancy", "residence_status", "since", "no_kk_masked", "credit", "members", "documents"]
+
+    def get_documents(self, obj) -> list:
+        return DocumentSerializer(obj.documents.select_related("resident", "uploaded_by"), many=True).data
 
     def get_no_kk_masked(self, obj) -> str:
         return mask(obj.no_kk)
@@ -245,13 +253,17 @@ class RegistrationSerializer(serializers.ModelSerializer):
     household_label = serializers.CharField(source="household.label", read_only=True, default=None)
     data = serializers.DictField(read_only=True)
     matching_household = serializers.SerializerMethodField()
+    documents = serializers.SerializerMethodField()
 
     class Meta:
         model = Registration
         fields = [
             "id", "name", "house_label", "username", "phone", "status", "review_note", "reviewed_by_name",
-            "reviewed_at", "household", "household_label", "data", "matching_household", "created_at",
+            "reviewed_at", "household", "household_label", "data", "matching_household", "documents", "created_at",
         ]
+
+    def get_documents(self, obj) -> list:
+        return DocumentSerializer(obj.documents.all(), many=True).data
 
     def get_matching_household(self, obj) -> dict | None:
         """KK aktif dengan nomor rumah yang sama (saran untuk 'gabung ke KK')."""
@@ -262,3 +274,35 @@ class RegistrationSerializer(serializers.ModelSerializer):
             block__iexact=h["block"], house_number__iexact=h["house_number"], is_active=True
         ).prefetch_related("members").first()
         return {"id": hh.pk, "label": hh.label, "head_name": hh.head_name} if hh else None
+
+
+# ---------- Dokumen data induk (KK/KTP) ----------
+
+class DocumentSerializer(serializers.ModelSerializer):
+    kind_label = serializers.CharField(source="get_kind_display", read_only=True)
+    resident_name = serializers.CharField(source="resident.name", read_only=True, default=None)
+    uploaded_by_name = serializers.CharField(source="uploaded_by.display_name", read_only=True, default=None)
+    file = serializers.FileField(write_only=True)
+    file_url = serializers.SerializerMethodField()
+    file_type = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Document
+        fields = [
+            "id", "kind", "kind_label", "household", "resident", "resident_name", "note", "file",
+            "file_url", "file_type", "uploaded_by_name", "created_at",
+        ]
+        read_only_fields = ["household"]
+
+    def get_file_url(self, obj) -> str:
+        from django.urls import reverse
+
+        return reverse("document-file", args=[obj.pk])
+
+    def get_file_type(self, obj) -> str:
+        return "pdf" if obj.file.name.lower().endswith(".pdf") else "image"
+
+    def validate_file(self, f):
+        from apps.core.files import validate_private_upload
+
+        return validate_private_upload(f, "Dokumen")

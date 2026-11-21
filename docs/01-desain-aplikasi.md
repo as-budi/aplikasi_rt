@@ -62,6 +62,13 @@ Catatan:
   - **Lebih bayar:** sisanya menjadi **saldo titipan** KK dan otomatis melunasi tagihan berikutnya (termasuk saat tagihan bulanan dibuat). Pembayaran dari titipan tercatat dengan metode "titipan" dan nominal 0, karena uangnya sudah masuk kas sebelumnya. Pengurus juga bisa memilih **mengembalikan kelebihan**, yang dicatat sebagai pengeluaran kas kategori "Pengembalian lebih bayar".
   - **Kurang bayar:** bulan yang tidak tertutup tetap belum bayar, dan uangnya disimpan sebagai titipan sampai cukup. Tagihan bulan mendatang yang tidak tertutup dihapus.
   - Warga dan pengurus melihat pratinjau ("pas / lebih → titipan / kurang Rp…") sebelum mengirim atau menerima. Saldo titipan tampil di Beranda warga, Riwayat iuran, dan Rekap (pengurus).
+- **Urutan bulan:** warga wajib membayar tunggakan mulai dari bulan **tertua**. Mencentang satu bulan otomatis ikut mencentang tunggakan sebelumnya, dan bayar di muka otomatis ikut melunasi semua tunggakan. Bulan di muka harus berurutan. Aturan ini juga diperiksa server; tagihan yang sedang menunggu verifikasi tidak dihitung. Untuk pengurus di "Catat bayar" hanya muncul peringatan, agar pengecualian hasil kesepakatan tetap bisa dicatat.
+- **Pembatalan pembayaran** (pengurus, dari riwayat iuran per KK, alasan wajib):
+  - Pembayaran **ditandai dibatalkan, tidak dihapus**, dan tidak lagi dihitung di kas.
+  - Bulan yang dilunasinya kembali belum bayar, dan tagihan bayar di muka dihapus.
+  - Saldo titipan dikembalikan. Pelunasan otomatis dari titipan pembayaran itu ikut dibatalkan. Jika titipannya sudah dipakai pembayaran lain, pembatalan ditolak dan pengurus diminta membatalkan pembayaran yang lebih baru dulu.
+  - Catatan pengembalian lebih bayar di kas dihapus.
+  - Bukti bayar terkait berstatus "dibatalkan" beserta alasannya, yang terlihat oleh warga.
 - **Rekap:**
   - *Per warga:* riwayat semua tagihan dan pembayaran satu KK beserta total tunggakan.
   - *Keseluruhan:* tabel matriks rumah × bulan (✅ lunas / ⏳ menunggu / ❌ belum), total pemasukan per bulan, dan persentase kepatuhan.
@@ -141,7 +148,7 @@ Nama tabel di bawah mengikuti model Django (tabel fisiknya berawalan nama app, m
 | `ChangeRequest` (residents) | household, resident (opsional), requested_by, changes (json `{field: {old, new}}`), note, status (`pending`/`disetujui`/`ditolak`), review_note, reviewed_by, reviewed_at |
 | `FeeType` (dues) | name, amount, period (`bulanan`/`sekali`), description, is_active |
 | `Bill` (dues) | household, fee_type, period (`YYYY-MM`), amount, status (`belum_bayar`/`menunggu_verifikasi`/`lunas`), payment |
-| `Payment` (dues) | household, total (uang yang benar-benar diterima), credit_change (± saldo titipan), refund, method (`tunai`/`transfer`/`qris`/`titipan`), paid_at, recorded_by, note |
+| `Payment` (dues) | household, total (uang yang benar-benar diterima), credit_change (± saldo titipan), refund + refund_entry, method (`tunai`/`transfer`/`qris`/`titipan`), paid_at, recorded_by, note, periods_label, cancelled_at/by, cancel_reason |
 | `PaymentProof` (dues) | household, uploaded_by, bills (banyak-ke-banyak), file 🔒, amount, transfer_date, method, note, status (`pending`/`diterima`/`ditolak`), review_note, verified_by, payment |
 | `Post` (posts) | type (`berita`/`kegiatan`), title, body, event_at, location, is_pinned, is_published, published_at, author |
 | `AuditLog` (core) | user, action, target, data (json), created_at |
@@ -224,6 +231,8 @@ Semua endpoint ada di bawah `/api/v1` (Django REST Framework) dan memakai sessio
 | GET | `/bills?household_id=&period=` | pengurus+ (warga: otomatis difilter ke KK sendiri) |
 | GET | `/bills/summary?year=` | semua (warga mendapat versi ringkas) |
 | POST | `/payments` (`bills`, `periods` bayar di muka, `amount` uang diterima, `refund_excess`) | pengurus+ |
+| GET | `/payments?household=&year=` | pengurus+ (warga: KK sendiri) |
+| POST | `/payments/{id}/cancel` (`reason`) | pengurus+ |
 | POST | `/payment-proofs` | semua |
 | POST | `/payment-proofs/{id}/approve` (opsional `amount` uang masuk, `refund_excess`), `/payment-proofs/{id}/reject` | pengurus+ |
 | GET | `/bills/prepay-options/?household=` (bulan bayar di muka, tarif, saldo titipan) | semua (warga: KK sendiri) |

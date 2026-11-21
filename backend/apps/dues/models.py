@@ -28,6 +28,12 @@ class FeeType(models.Model):
         return f"{self.name} (Rp{self.amount:,})".replace(",", ".")
 
 
+class PaymentQuerySet(models.QuerySet):
+    def active(self):
+        """Pembayaran yang tidak dibatalkan (dipakai untuk perhitungan kas)."""
+        return self.filter(cancelled_at__isnull=True)
+
+
 class Payment(models.Model):
     class Method(models.TextChoices):
         TUNAI = "tunai", "Tunai"
@@ -42,6 +48,16 @@ class Payment(models.Model):
     total = models.PositiveIntegerField("Uang diterima (Rp)", help_text="Uang yang benar-benar masuk kas, bukan total tagihan.")
     credit_change = models.IntegerField("Perubahan saldo titipan (Rp)", default=0)
     refund = models.PositiveIntegerField("Dikembalikan ke warga (Rp)", default=0)
+    refund_entry = models.OneToOneField(
+        "finance.CashEntry", null=True, blank=True, on_delete=models.SET_NULL, related_name="refunded_payment",
+        help_text="Catatan pengeluaran kas untuk pengembalian lebih bayar",
+    )
+    cancelled_at = models.DateTimeField("Dibatalkan pada", null=True, blank=True)
+    cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    cancel_reason = models.CharField("Alasan pembatalan", max_length=255, blank=True)
+    periods_label = models.CharField("Bulan yang dilunasi", max_length=200, blank=True, help_text="Salinan saat dicatat (tetap ada setelah dibatalkan)")
+
+    objects = PaymentQuerySet.as_manager()
     method = models.CharField("Metode", max_length=10, choices=Method.choices)
     paid_at = models.DateField("Tanggal bayar")
     recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
@@ -98,6 +114,7 @@ class PaymentProof(models.Model):
         PENDING = "pending", "Menunggu"
         ACCEPTED = "diterima", "Diterima"
         REJECTED = "ditolak", "Ditolak"
+        CANCELLED = "dibatalkan", "Dibatalkan"  # sudah diterima lalu pembayarannya dibatalkan
 
     household = models.ForeignKey("residents.Household", on_delete=models.PROTECT, related_name="payment_proofs")
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")

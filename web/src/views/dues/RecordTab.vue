@@ -4,7 +4,7 @@ import { errMsg, fetchAll, http } from '@/api/http'
 import type { Bill, PayMethod, PrepayOptions } from '@/api/types'
 import { useToast } from '@/stores/toast'
 import { previewAllocation, selectedItems } from '@/utils/allocation'
-import { rp, todayISO } from '@/utils/format'
+import { periodLabel, rp, todayISO } from '@/utils/format'
 import AllocationNote from '@/components/AllocationNote.vue'
 import BillPicker from './BillPicker.vue'
 import HouseholdPicker from './HouseholdPicker.vue'
@@ -29,6 +29,12 @@ const credit = computed(() => prepay.value?.credit ?? 0)
 const items = computed(() => selectedItems(bills.value, selected.value, periods.value, prepay.value?.monthly_total ?? 0))
 const total = computed(() => items.value.reduce((s, i) => s + i.amount, 0))
 const alloc = computed(() => previewAllocation(items.value, form.amount, credit.value))
+// Pengurus boleh mencatat tidak berurutan (mis. kesepakatan), tapi diberi peringatan
+const skipped = computed(() => {
+  const chosen = new Set(bills.value.filter((b) => selected.value.includes(b.id)).map((b) => b.period))
+  const latest = periods.value.length ? '9999-99' : [...chosen].sort().at(-1) ?? ''
+  return [...new Set(bills.value.filter((b) => !chosen.has(b.period) && b.period < latest).map((b) => b.period))].sort()
+})
 watch(total, (t) => {
   if (!amountTouched.value) form.amount = Math.max(0, t - credit.value)
 })
@@ -96,6 +102,9 @@ watch(() => props.householdId, load, { immediate: true })
           <select v-model="form.method" class="input"><option value="tunai">Tunai</option><option value="transfer">Transfer</option><option value="qris">QRIS</option></select>
         </label>
       </div>
+      <p v-if="skipped.length" class="mb-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">
+        Tidak berurutan: tunggakan {{ skipped.map((p) => periodLabel(p)).join(', ') }} belum dipilih. Tetap bisa dicatat bila memang disepakati.
+      </p>
       <AllocationNote :items="items" :received="form.amount" :credit="credit" :refund="form.refund" />
       <label v-if="alloc.refundable > 0" class="mb-4 flex items-center gap-2 text-sm">
         <input v-model="form.refund" type="checkbox" /> Kembalikan kelebihan {{ rp(alloc.refundable) }} ke warga (bukan titipan)

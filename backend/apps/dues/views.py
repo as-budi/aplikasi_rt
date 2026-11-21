@@ -95,9 +95,17 @@ class BillViewSet(viewsets.ReadOnlyModelViewSet):
         })
 
 
+class PaymentFilter(django_filters.FilterSet):
+    year = django_filters.NumberFilter(field_name="paid_at", lookup_expr="year")
+
+    class Meta:
+        model = Payment
+        fields = ["household", "method", "year"]
+
+
 class PaymentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):
     serializer_class = PaymentSerializer
-    filterset_fields = ["household", "method"]
+    filterset_class = PaymentFilter
 
     def get_permissions(self):
         if self.action == "create":
@@ -105,7 +113,9 @@ class PaymentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         return super().get_permissions()
 
     def get_queryset(self):
-        qs = Payment.objects.select_related("household", "recorded_by").prefetch_related("bills__fee_type", "household__members")
+        qs = Payment.objects.select_related("household", "recorded_by", "cancelled_by", "proof").prefetch_related(
+            "bills__fee_type", "household__members"
+        )
         return _scope_to_household(qs, self.request)
 
     def create(self, request, *args, **kwargs):
@@ -119,6 +129,12 @@ class PaymentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
                 amount=d["amount"], refund_excess=d["refund_excess"],
             )
         return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
+
+
+    @action(detail=True, methods=["post"], permission_classes=[IsStaffRT])
+    def cancel(self, request, pk=None):
+        payment = services.cancel_payment(self.get_object(), request.user, request.data.get("reason", ""))
+        return Response(self.get_serializer(payment).data)
 
 
 class PaymentProofViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):

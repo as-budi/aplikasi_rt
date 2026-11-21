@@ -156,7 +156,7 @@ export interface PaymentProof {
   transfer_date: string
   method: PayMethod
   note: string
-  status: 'pending' | 'diterima' | 'ditolak'
+  status: 'pending' | 'diterima' | 'ditolak' | 'dibatalkan'
   review_note: string
   verified_by_name: string | null
   verified_at: string | null
@@ -315,5 +315,25 @@ export interface ResidentDocument {
   file_url: string
   file_type: 'image' | 'pdf'
   uploaded_by_name: string | null
+  created_at: string
+}
+
+export interface Payment {
+  id: number
+  household: number
+  household_label: string
+  total: number
+  credit_change: number
+  refund: number
+  method: PayMethod | 'titipan'
+  method_label: string
+  paid_at: string
+  recorded_by_name: string | null
+  note: string
+  periods_label: string
+  proof_id: number | null
+  cancelled_at: string | null
+  cancelled_by_name: string | null
+  cancel_reason: string
   created_at: string
 }

@@ -79,6 +79,13 @@ def _lock_bills(household, bill_ids, allowed_statuses):
     return sorted(bills, key=lambda b: (b.period, b.fee_type_id))
 
 
+def _snapshot_periods(payment, bills) -> None:
+    from apps.finance.services import periods_label
+
+    payment.periods_label = periods_label(b.period for b in bills)[:200]
+    payment.save(update_fields=["periods_label"])
+
+
 def allocate(bills, available: int) -> int:
     """Berapa tagihan pertama (urut bulan tertua) yang lunas dengan uang `available`.
 
@@ -135,6 +142,7 @@ def record_payment(
     )
     if paid:
         Bill.objects.filter(pk__in=[b.pk for b in paid]).update(status=Bill.Status.LUNAS, payment=payment)
+        _snapshot_periods(payment, paid)
     if unpaid:
         unpaid_qs = Bill.objects.filter(pk__in=[b.pk for b in unpaid])
         unpaid_qs.filter(status=Bill.Status.MENUNGGU).update(status=Bill.Status.BELUM)
@@ -143,10 +151,11 @@ def record_payment(
     household.save(update_fields=["credit", "updated_at"])
 
     if refund:
-        CashEntry.objects.create(
+        payment.refund_entry = CashEntry.objects.create(
             kind=CashEntry.Kind.OUT, category=CashEntry.Category.PENGEMBALIAN, amount=refund, date=paid_at,
             description=f"Pengembalian lebih bayar iuran {household.head_name} ({household.label})", recorded_by=user,
         )
+        payment.save(update_fields=["refund_entry"])
     audit(
         user, "catat_pembayaran", payment, received=received, allocated=allocated, method=method,
         paid=[b.pk for b in paid], unpaid=[b.pk for b in unpaid], credit=household.credit, refund=refund,
@@ -176,15 +185,50 @@ def apply_credit(household, user=None) -> Payment | None:
         recorded_by=user if user and user.is_authenticated else None, note="Dibayar dari saldo titipan", credit_change=-used,
     )
     Bill.objects.filter(pk__in=[b.pk for b in covered]).update(status=Bill.Status.LUNAS, payment=payment)
+    _snapshot_periods(payment, covered)
     household.credit -= used
     household.save(update_fields=["credit", "updated_at"])
     audit(user, "pakai_titipan", payment, used=used, bills=[b.pk for b in covered])
     return payment
 
 
+def prepay_periods(household) -> list[str]:
+    """Bulan mendatang (urut) yang belum punya tagihan untuk KK ini, maks. MAX_PREPAY_MONTHS."""
+    current = current_period()
+    existing = set(Bill.objects.filter(household=household, period__gt=current).values_list("period", flat=True))
+    return [p for p in (add_months(current, i) for i in range(1, MAX_PREPAY_MONTHS + 1)) if p not in existing]
+
+
+def check_sequential(household, bill_ids, periods) -> None:
+    """Aturan urutan: tunggakan dibayar mulai dari bulan tertua; bayar di muka hanya bila semua tunggakan
+    ikut dibayar dan bulannya berurutan. Tagihan yang sedang menunggu verifikasi tidak dihitung."""
+    from apps.finance.services import periods_label
+
+    periods = sorted(set(periods or []))
+    selected = list(Bill.objects.filter(pk__in=bill_ids, household=household))
+    selected_ids = {b.pk for b in selected}
+    unpaid = Bill.objects.filter(household=household, status=Bill.Status.BELUM, period__lte=current_period())
+    if periods:
+        missing = [b for b in unpaid if b.pk not in selected_ids]
+        if missing:
+            raise ValidationError({"bills": f"Bayar di muka hanya bisa setelah semua tunggakan ikut dibayar: {periods_label(b.period for b in missing)}."})
+        options = prepay_periods(household)
+        if periods != options[: len(periods)]:
+            raise ValidationError({"periods": "Bulan bayar di muka harus berurutan mulai dari bulan depan (maks. 12 bulan)."})
+    elif selected:
+        latest = max(b.period for b in selected)
+        missing = [b for b in unpaid.filter(period__lte=latest) if b.pk not in selected_ids]
+        if missing:
+            raise ValidationError({"bills": f"Lunasi dulu tunggakan yang lebih lama: {periods_label(b.period for b in missing)}."})
+
+
 @transaction.atomic
 def submit_proof(*, household, user, bill_ids, file, amount, transfer_date, method, note="", periods=None) -> PaymentProof:
-    """Warga mengunggah bukti bayar (boleh beberapa bulan, termasuk bayar di muka). Tagihan menjadi 'menunggu verifikasi'."""
+    """Warga mengunggah bukti bayar (boleh beberapa bulan, termasuk bayar di muka). Tagihan menjadi 'menunggu verifikasi'.
+
+    Bulan wajib berurutan dari tunggakan tertua (check_sequential).
+    """
+    check_sequential(household, bill_ids, periods)
     bill_ids = list(bill_ids) + ensure_future_bills(household, periods)
     bills = _lock_bills(household, bill_ids, {Bill.Status.BELUM})
     proof = PaymentProof.objects.create(
@@ -235,6 +279,71 @@ def reject_proof(proof: PaymentProof, user, note: str) -> PaymentProof:
     proof.save()
     audit(user, "tolak_bukti", proof, note=note)
     return proof
+
+
+@transaction.atomic
+def cancel_payment(payment: Payment, user, reason: str, *, _cascade_from=None) -> Payment:
+    """Batalkan pembayaran yang sudah tercatat (mis. ternyata uang tidak masuk / salah KK).
+
+    - Pembayaran ditandai dibatalkan (tidak dihapus) dan tidak lagi dihitung di kas.
+    - Tagihan yang dilunasinya kembali belum bayar; tagihan bulan mendatang dihapus.
+    - Perubahan saldo titipan dikembalikan. Pemakaian titipan otomatis yang bergantung pada pembayaran ini
+      ikut dibatalkan; bila titipan sudah terpakai pembayaran lain, pembatalan ditolak.
+    - Catatan pengembalian lebih bayar di kas dihapus; bukti bayar terkait menjadi 'dibatalkan'.
+    """
+    from apps.finance.models import CashEntry
+
+    if not (reason or "").strip():
+        raise ValidationError({"reason": "Tuliskan alasan pembatalan."})
+    payment = Payment.objects.select_for_update().get(pk=payment.pk)
+    if payment.cancelled_at:
+        raise ValidationError("Pembayaran ini sudah dibatalkan.")
+    if payment.method == Payment.Method.TITIPAN and _cascade_from is None:
+        raise ValidationError("Pelunasan dari saldo titipan dibatalkan otomatis bersama pembayaran asal titipannya.")
+    household = Household.objects.select_for_update().get(pk=payment.household_id)
+
+    if payment.credit_change > household.credit:
+        # Titipan dari pembayaran ini sudah terpakai: batalkan dulu pemakaian otomatis (terbaru lebih dulu)
+        later = Payment.objects.active().filter(household=household, credit_change__lt=0, pk__gt=payment.pk).order_by("-pk")
+        for dep in later:
+            if dep.method != Payment.Method.TITIPAN:
+                raise ValidationError(
+                    f"Saldo titipan dari pembayaran ini sudah dipakai pembayaran #{dep.pk} ({dep.paid_at:%d-%m-%Y}). "
+                    f"Batalkan pembayaran #{dep.pk} terlebih dahulu."
+                )
+            cancel_payment(dep, user, f"Otomatis: pembayaran #{payment.pk} dibatalkan", _cascade_from=payment)
+            household.refresh_from_db()
+            if payment.credit_change <= household.credit:
+                break
+        if payment.credit_change > household.credit:
+            raise ValidationError("Saldo titipan dari pembayaran ini sudah terpakai dan tidak bisa dikembalikan otomatis.")
+
+    if payment.refund and not payment.refund_entry_id:
+        raise ValidationError("Pengembalian lebih bayar pembayaran ini tidak tertaut ke kas; hapus manual di Kas RT lalu hubungi admin.")
+
+    bills = Bill.objects.filter(payment=payment)
+    bill_ids = list(bills.values_list("pk", flat=True))
+    bills.update(status=Bill.Status.BELUM, payment=None)
+    _drop_unpaid_future_bills(Bill.objects.filter(pk__in=bill_ids))
+
+    household.credit -= payment.credit_change  # credit_change negatif = titipan yang dipakai -> dikembalikan
+    household.save(update_fields=["credit", "updated_at"])
+
+    if payment.refund_entry_id:
+        CashEntry.objects.filter(pk=payment.refund_entry_id).delete()
+
+    payment.cancelled_at = timezone.now()
+    payment.cancelled_by = user
+    payment.cancel_reason = reason
+    payment.save(update_fields=["cancelled_at", "cancelled_by", "cancel_reason"])
+
+    PaymentProof.objects.filter(payment=payment).update(
+        status=PaymentProof.Status.CANCELLED, review_note=f"Dibatalkan: {reason}"
+    )
+    audit(user, "batalkan_pembayaran", payment, reason=reason, bills=bill_ids, cascade_from=getattr(_cascade_from, "pk", None))
+    if _cascade_from is None:
+        apply_credit(household, user)  # titipan yang kembali bisa langsung melunasi tunggakan tertua
+    return payment
 
 
 def bill_summary(year: int, include_private: bool) -> dict:

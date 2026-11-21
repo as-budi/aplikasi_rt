@@ -105,7 +105,7 @@ onMounted(load)
         Anda punya <b>saldo titipan {{ rp(credit) }}</b> dari pembayaran sebelumnya; otomatis ikut dipakai.
       </p>
       <div class="field"><span>Bulan yang dibayar</span></div>
-      <BillPicker v-model="selected" v-model:periods="periods" :bills="bills" :prepay="prepay" />
+      <BillPicker v-model="selected" v-model:periods="periods" :bills="bills" :prepay="prepay" sequential />
 
       <div class="mt-4 grid grid-cols-2 gap-3">
         <label class="field">

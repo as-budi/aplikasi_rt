@@ -15,7 +15,7 @@ def balance_before(day: date) -> int:
     """Saldo kas sebelum tanggal `day` (iuran + pemasukan lain − pengeluaran)."""
     entries = CashEntry.objects.filter(date__lt=day)
     return (
-        _sum(Payment.objects.filter(paid_at__lt=day), "total")
+        _sum(Payment.objects.active().filter(paid_at__lt=day), "total")
         + _sum(entries.filter(kind=CashEntry.Kind.IN))
         - _sum(entries.filter(kind=CashEntry.Kind.OUT))
     )
@@ -23,7 +23,7 @@ def balance_before(day: date) -> int:
 
 def current_balance() -> int:
     return (
-        _sum(Payment.objects.all(), "total")
+        _sum(Payment.objects.active(), "total")
         + _sum(CashEntry.objects.filter(kind=CashEntry.Kind.IN))
         - _sum(CashEntry.objects.filter(kind=CashEntry.Kind.OUT))
     )
@@ -33,7 +33,7 @@ def cash_report(year: int) -> dict:
     """Laporan kas per bulan. Iuran warga dihitung dari tanggal pembayaran."""
     opening = balance_before(date(year, 1, 1))
     entries = CashEntry.objects.filter(date__year=year)
-    payments = Payment.objects.filter(paid_at__year=year)
+    payments = Payment.objects.active().filter(paid_at__year=year)
 
     balance = opening
     months = []
@@ -100,7 +100,7 @@ def ledger(year: int, month: int | None = None, kind: str | None = None, private
         })
 
     if kind in (None, "", CashEntry.Kind.IN):
-        payments = Payment.objects.filter(paid_at__year=year, total__gt=0).select_related("household", "recorded_by").prefetch_related(
+        payments = Payment.objects.active().filter(paid_at__year=year, total__gt=0).select_related("household", "recorded_by").prefetch_related(
             "bills", "household__members"
         )
         if month:
@@ -123,7 +123,7 @@ def ledger(year: int, month: int | None = None, kind: str | None = None, private
                 })
         else:
             per_month: dict[int, dict] = {}
-            for p in Payment.objects.filter(pk__in=payments.values("pk")).only("total", "paid_at"):
+            for p in Payment.objects.active().filter(pk__in=payments.values("pk")).only("total", "paid_at"):
                 m = per_month.setdefault(p.paid_at.month, {"amount": 0, "count": 0, "date": p.paid_at})
                 m["amount"] += p.total
                 m["count"] += 1

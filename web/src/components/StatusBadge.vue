@@ -11,6 +11,7 @@ const MAP: Record<string, [string, string]> = {
   diterima: ['Diterima', 'badge-ok'],
   disetujui: ['Disetujui', 'badge-ok'],
   ditolak: ['Ditolak', 'badge-bad'],
+  dibatalkan: ['Dibatalkan', 'badge-muted'],
 }
 
 const info = computed(() => (props.status ? MAP[props.status] : undefined) ?? ['Belum ada tagihan', 'badge-muted'])

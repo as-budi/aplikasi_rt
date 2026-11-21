@@ -57,13 +57,21 @@ class PaymentCreateSerializer(_BillSelectionMixin):
 class PaymentSerializer(serializers.ModelSerializer):
     household_label = serializers.CharField(source="household.label", read_only=True)
     recorded_by_name = serializers.CharField(source="recorded_by.display_name", read_only=True, default=None)
+    cancelled_by_name = serializers.CharField(source="cancelled_by.display_name", read_only=True, default=None)
+    method_label = serializers.CharField(source="get_method_display", read_only=True)
     bills = BillMiniSerializer(many=True, read_only=True)
+    proof_id = serializers.SerializerMethodField()
+
+    def get_proof_id(self, obj) -> int | None:
+        proof = getattr(obj, "proof", None)
+        return proof.pk if proof else None
 
     class Meta:
         model = Payment
         fields = [
-            "id", "household", "household_label", "total", "credit_change", "refund", "method", "paid_at",
-            "recorded_by_name", "note", "bills", "created_at",
+            "id", "household", "household_label", "total", "credit_change", "refund", "method", "method_label", "paid_at",
+            "recorded_by_name", "note", "bills", "periods_label", "proof_id", "cancelled_at", "cancelled_by_name", "cancel_reason",
+            "created_at",
         ]
 
 

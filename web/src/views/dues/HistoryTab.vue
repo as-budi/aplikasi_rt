@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { errMsg, fetchAll, http } from '@/api/http'
-import type { Bill, BillStatus, PrepayOptions } from '@/api/types'
+import type { Bill, BillStatus, Payment, PrepayOptions } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
+import { useToast } from '@/stores/toast'
 import { currentYear, dateLabel, periodLabel, rp } from '@/utils/format'
 import { METHOD } from '@/utils/labels'
+import BaseModal from '@/components/BaseModal.vue'
 import LoadState from '@/components/LoadState.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import StatusDot from '@/components/StatusDot.vue'
@@ -18,6 +20,28 @@ const year = ref(currentYear())
 const years = [currentYear(), currentYear() - 1, currentYear() - 2]
 const bills = ref<Bill[]>([])
 const credit = ref(0)
+const payments = ref<Payment[]>([])
+const toast = useToast()
+const cancelling = ref<Payment | null>(null)
+const reason = ref('')
+const busy = ref(false)
+
+async function cancelPayment() {
+  if (!cancelling.value) return
+  if (!reason.value.trim()) return toast.error('Tuliskan alasan pembatalan.')
+  busy.value = true
+  try {
+    await http.post(`/payments/${cancelling.value.id}/cancel/`, { reason: reason.value })
+    toast.ok('Pembayaran dibatalkan; tagihan kembali belum bayar')
+    cancelling.value = null
+    reason.value = ''
+    load()
+  } catch (e) {
+    toast.error(errMsg(e))
+  } finally {
+    busy.value = false
+  }
+}
 const loading = ref(false)
 const error = ref('')
 
@@ -44,12 +68,14 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [b, o] = await Promise.all([
+    const [b, o, p] = await Promise.all([
       fetchAll<Bill>('/bills/', { household: target.value, year: year.value }),
       http.get<PrepayOptions>('/bills/prepay-options/', { params: { household: target.value } }),
+      fetchAll<Payment>('/payments/', { household: target.value, year: year.value }),
     ])
     bills.value = b
     credit.value = o.data.credit
+    payments.value = p
   } catch (e) {
     error.value = errMsg(e)
   } finally {
@@ -101,5 +127,48 @@ watch([target, year], load, { immediate: true })
         </div>
       </div>
     </div>
+
+    <div class="card mt-4">
+      <h2 class="card-title">Pembayaran {{ year }}</h2>
+      <p v-if="!payments.length" class="text-sm text-muted">Belum ada pembayaran.</p>
+      <div class="list">
+        <div v-for="p in payments" :key="p.id" class="flex flex-wrap items-center gap-3 py-3" :class="{ 'opacity-60': p.cancelled_at }">
+          <div class="min-w-0 flex-1">
+            <b :class="{ 'line-through': p.cancelled_at }">{{ p.method === 'titipan' ? 'Dari saldo titipan' : rp(p.total) }}</b>
+            <span class="text-sm text-muted"> · {{ dateLabel(p.paid_at) }} · {{ p.method_label }}</span>
+            <div class="text-sm text-muted">
+              {{ p.periods_label ? `Melunasi ${p.periods_label}` : 'Disimpan sebagai titipan' }}
+              <template v-if="p.credit_change > 0"> · +{{ rp(p.credit_change) }} titipan</template>
+              <template v-else-if="p.credit_change < 0"> · pakai titipan {{ rp(-p.credit_change) }}</template>
+              <template v-if="p.refund"> · dikembalikan {{ rp(p.refund) }}</template>
+            </div>
+            <div v-if="p.cancelled_at" class="text-xs text-bad">Dibatalkan {{ dateLabel(p.cancelled_at) }} oleh {{ p.cancelled_by_name }}: {{ p.cancel_reason }}</div>
+          </div>
+          <span v-if="p.cancelled_at" class="badge badge-muted">Dibatalkan</span>
+          <button
+            v-else-if="auth.isStaff && p.method !== 'titipan'"
+            class="btn btn-sm btn-danger"
+            @click="cancelling = p; reason = ''"
+          >Batalkan</button>
+        </div>
+      </div>
+    </div>
   </LoadState>
+
+  <BaseModal :open="!!cancelling" title="Batalkan pembayaran" @close="cancelling = null">
+    <template v-if="cancelling">
+      <p class="mb-3 text-sm">
+        Pembayaran <b>{{ rp(cancelling.total) }}</b> tanggal {{ dateLabel(cancelling.paid_at) }}
+        <template v-if="cancelling.periods_label">untuk <b>{{ cancelling.periods_label }}</b></template> akan dibatalkan.
+      </p>
+      <ul class="mb-4 list-disc space-y-1 pl-5 text-sm text-muted">
+        <li>Bulan tersebut kembali <b>belum bayar</b>; tagihan bulan mendatang (bayar di muka) dihapus.</li>
+        <li>Uangnya tidak lagi dihitung di Kas RT<template v-if="cancelling.refund">, dan catatan pengembalian {{ rp(cancelling.refund) }} ikut dihapus</template>.</li>
+        <li v-if="cancelling.credit_change">Saldo titipan disesuaikan kembali.</li>
+        <li>Pembayaran tetap tercatat sebagai <b>dibatalkan</b> beserta alasannya (tidak dihapus).</li>
+      </ul>
+      <label class="field"><span>Alasan pembatalan *</span><input v-model="reason" class="input" required placeholder="mis. uang tidak masuk ke rekening RT" /></label>
+      <button class="btn btn-primary w-full" :disabled="busy" @click="cancelPayment">Batalkan pembayaran</button>
+    </template>
+  </BaseModal>
 </template>

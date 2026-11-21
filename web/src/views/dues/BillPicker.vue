@@ -7,7 +7,7 @@ import { periodLabel, rp } from '@/utils/format'
  * Pilih bulan yang dibayar: tagihan yang belum dibayar (v-model = id tagihan)
  * dan bulan mendatang untuk bayar di muka (v-model:periods).
  */
-const props = defineProps<{ bills: Bill[]; modelValue: number[]; prepay?: PrepayOptions | null; periods?: string[] }>()
+const props = defineProps<{ bills: Bill[]; modelValue: number[]; prepay?: PrepayOptions | null; periods?: string[]; sequential?: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [ids: number[]]; 'update:periods': [periods: string[]] }>()
 
 const groups = computed(() => {
@@ -19,11 +19,26 @@ const selectedPeriods = computed(() => props.periods ?? [])
 const isOn = (items: Bill[]) => items.every((b) => props.modelValue.includes(b.id))
 
 function toggle(items: Bill[]) {
+  if (props.sequential) {
+    // Wajib berurutan dari tunggakan tertua: centang = ikut semua bulan sebelumnya; batal = ikut semua sesudahnya
+    const idx = groups.value.findIndex(([, g]) => g === items)
+    const upto = isOn(items) ? idx : idx + 1
+    emit('update:modelValue', groups.value.slice(0, upto).flatMap(([, g]) => g.map((b) => b.id)))
+    if (isOn(items)) emit('update:periods', [])
+    return
+  }
   const ids = items.map((b) => b.id)
   emit('update:modelValue', isOn(items) ? props.modelValue.filter((id) => !ids.includes(id)) : [...new Set([...props.modelValue, ...ids])])
 }
 
+/** Semua tunggakan sudah dicentang (syarat bayar di muka untuk warga) */
+const allArrearsOn = computed(() => groups.value.every(([, g]) => isOn(g)))
+
 function togglePeriod(period: string) {
+  if (props.sequential && !allArrearsOn.value) {
+    // otomatis ikut melunasi semua tunggakan
+    emit('update:modelValue', groups.value.flatMap(([, g]) => g.map((b) => b.id)))
+  }
   const list = selectedPeriods.value
   if (list.includes(period)) {
     // bayar di muka harus berurutan: membatalkan satu bulan ikut membatalkan bulan sesudahnya
@@ -45,6 +60,7 @@ const futureVisible = computed(() => {
 
 <template>
   <p v-if="!groups.length && !prepay?.periods.length" class="text-sm text-muted">Tidak ada tagihan yang belum dibayar. 🎉</p>
+  <p v-else-if="sequential && groups.length > 1" class="mb-2 text-xs text-muted">Tunggakan dibayar berurutan mulai dari bulan terlama.</p>
   <div class="grid gap-2 sm:grid-cols-2">
     <label
       v-for="[period, items] in groups"
@@ -63,6 +79,7 @@ const futureVisible = computed(() => {
 
   <template v-if="prepay?.periods.length">
     <div class="mt-4 mb-2 text-sm font-semibold">Bayar di muka <span class="font-normal text-muted">(tarif saat ini)</span></div>
+    <p v-if="sequential && groups.length && !allArrearsOn" class="mb-2 text-xs text-muted">Memilih bulan di muka otomatis ikut melunasi semua tunggakan.</p>
     <div class="grid gap-2 sm:grid-cols-2">
       <label
         v-for="period in futureVisible"

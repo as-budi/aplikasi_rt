@@ -1,0 +1,7 @@
+**/node_modules
+web/dist
+web/dev-dist
+backend
+docs
+.git
+.env*

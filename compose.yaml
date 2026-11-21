@@ -1,0 +1,75 @@
+# Docker Compose untuk PENGEMBANGAN. Produksi: compose.prod.yaml
+x-django: &django
+  build:
+    context: ./backend
+    target: dev
+    args:
+      UID: ${UID:-1000}
+      GID: ${GID:-1000}
+  image: aplikasi-rt-api:dev
+  env_file: ./backend/.env
+  volumes:
+    - ./backend:/app
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_started
+
+services:
+  api:
+    <<: *django
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  worker:
+    <<: *django
+    command: celery -A config worker -l info --concurrency=2
+
+  beat:
+    <<: *django
+    command: celery -A config beat -l info -s /tmp/celerybeat-schedule
+
+  db:
+    image: mysql:8.4
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: aplikasi_rt
+      MYSQL_USER: rt
+      MYSQL_PASSWORD: rahasia
+      MYSQL_ROOT_PASSWORD: rahasia-root
+      TZ: Asia/Jakarta
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-prahasia-root"]
+      interval: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+
+  web:
+    image: node:22-alpine
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /app
+    environment:
+      HOME: /tmp
+    volumes:
+      - ./web:/app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "127.0.0.1:5173:5173"
+    depends_on:
+      - api
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "127.0.0.1:8025:8025"
+
+volumes:
+  dbdata:

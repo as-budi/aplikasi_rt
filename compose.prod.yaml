@@ -1,0 +1,66 @@
+# Docker Compose untuk PRODUKSI (VPS). Lihat docs/03-pengembangan-docker.md bagian "Deploy ke VPS".
+# Hanya nginx yang membuka port, dan hanya ke 127.0.0.1 (Nginx host meneruskan domain ke sini).
+x-django: &django
+  build:
+    context: ./backend
+    target: prod
+  image: aplikasi-rt-api:prod
+  env_file: ./backend/.env.prod
+  volumes:
+    - media:/app/media
+    - staticfiles:/app/staticfiles
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_started
+
+services:
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
+    image: aplikasi-rt-nginx:prod
+    ports:
+      - "127.0.0.1:${RT_PORT:-8081}:80" # JANGAN "8081:80": Docker melewati firewall UFW
+    volumes:
+      - media:/app/media:ro
+      - staticfiles:/app/staticfiles:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  api:
+    <<: *django
+
+  worker:
+    <<: *django
+    command: celery -A config worker -l info --concurrency=2
+
+  beat:
+    <<: *django
+    command: celery -A config beat -l info -s /tmp/celerybeat-schedule
+
+  db:
+    image: mysql:8.4
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    env_file: ./.env.db
+    environment:
+      TZ: Asia/Jakarta
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      retries: 30
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+volumes:
+  dbdata:
+  media:
+  staticfiles:

@@ -83,6 +83,7 @@ onMounted(load)
               <th class="sticky left-0 z-[1] bg-surface pl-4! md:pl-2!">Rumah</th>
               <th v-for="p in periods" :key="p" class="text-center!">{{ monthShort(p) }}</th>
               <th v-if="auth.isStaff" class="text-right!">Tunggakan</th>
+              <th v-if="auth.isStaff" class="text-right!">Titipan</th>
             </tr>
           </thead>
           <tbody>
@@ -100,6 +101,10 @@ onMounted(load)
                 <span v-if="r.arrears" class="badge badge-bad">{{ rp(r.arrears) }}</span>
                 <span v-else class="text-muted">—</span>
               </td>
+              <td v-if="auth.isStaff" class="text-right!">
+                <span v-if="r.credit" class="badge badge-primary">{{ rp(r.credit) }}</span>
+                <span v-else class="text-muted">—</span>
+              </td>
             </tr>
           </tbody>
           <tfoot v-if="data.income">
@@ -107,6 +112,7 @@ onMounted(load)
               <td class="sticky left-0 z-[1] bg-surface pl-4! font-semibold md:pl-2!">Pemasukan</td>
               <td v-for="p in periods" :key="p" class="text-center! text-xs font-semibold">{{ Math.round((data.income[p] ?? 0) / 1000) }}rb</td>
               <td class="text-right! font-bold">{{ rp(totalIncome) }}</td>
+              <td />
             </tr>
           </tfoot>
         </table>

@@ -100,7 +100,7 @@ def ledger(year: int, month: int | None = None, kind: str | None = None, private
         })
 
     if kind in (None, "", CashEntry.Kind.IN):
-        payments = Payment.objects.filter(paid_at__year=year).select_related("household", "recorded_by").prefetch_related(
+        payments = Payment.objects.filter(paid_at__year=year, total__gt=0).select_related("household", "recorded_by").prefetch_related(
             "bills", "household__members"
         )
         if month:
@@ -108,10 +108,15 @@ def ledger(year: int, month: int | None = None, kind: str | None = None, private
         if private:
             for p in payments:
                 periods = periods_label(b.period for b in p.bills.all())
+                extra = ""
+                if p.credit_change > 0:
+                    extra = f" · +Rp{p.credit_change:,} titipan".replace(",", ".")
+                elif p.credit_change < 0:
+                    extra = f" · pakai titipan Rp{-p.credit_change:,}".replace(",", ".")
                 rows.append({
                     "source": "iuran", "id": p.pk, "kind": CashEntry.Kind.IN, "category": "iuran",
                     "category_label": "Iuran warga",
-                    "description": f"Iuran {p.household.head_name} ({p.household.label}) · {periods} · {p.get_method_display().lower()}",
+                    "description": f"Iuran {p.household.head_name} ({p.household.label}) · {periods or 'titipan'} · {p.get_method_display().lower()}{extra}",
                     "amount": p.total, "date": p.paid_at, "receipt": False,
                     "recorded_by_name": p.recorded_by.display_name if p.recorded_by else None,
                     "household_id": p.household_id,

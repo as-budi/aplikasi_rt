@@ -86,8 +86,9 @@ class HouseholdListSerializer(serializers.ModelSerializer):
         model = Household
         fields = [
             "id", "label", "block", "house_number", "address", "occupancy", "residence_status", "is_active",
-            "head_name", "head_phone", "member_count", "no_kk_masked", "current_status",
+            "head_name", "head_phone", "member_count", "no_kk_masked", "current_status", "credit",
         ]
+        read_only_fields = ["credit"]
 
     def get_head_phone(self, obj) -> str:
         head = obj.head
@@ -137,7 +138,7 @@ class HouseholdOwnSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Household
-        fields = ["id", "label", "block", "house_number", "address", "occupancy", "residence_status", "since", "no_kk_masked", "members"]
+        fields = ["id", "label", "block", "house_number", "address", "occupancy", "residence_status", "since", "no_kk_masked", "credit", "members"]
 
     def get_no_kk_masked(self, obj) -> str:
         return mask(obj.no_kk)

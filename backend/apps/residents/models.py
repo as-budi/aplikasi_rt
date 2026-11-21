@@ -28,6 +28,10 @@ class Household(models.Model):
     )
     since = models.DateField("Tinggal sejak", null=True, blank=True)
     is_active = models.BooleanField("Aktif", default=True)
+    credit = models.PositiveIntegerField(
+        "Saldo titipan (Rp)", default=0,
+        help_text="Kelebihan/sisa pembayaran iuran; otomatis dipakai untuk tagihan berikutnya. Diubah lewat pembayaran, bukan manual.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

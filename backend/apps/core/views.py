@@ -33,6 +33,7 @@ class DashboardView(APIView):
                 "current_status": aggregate_status(b.status for b in current),
                 "current_bills": BillSerializer(current, many=True).data,
                 "arrears_total": sum(b.amount for b in unpaid),
+                "credit": household.credit,
                 "arrears_months": len({b.period for b in unpaid}),
             }
 

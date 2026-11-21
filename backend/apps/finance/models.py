@@ -27,6 +27,7 @@ class CashEntry(models.Model):
         KEGIATAN = "kegiatan", "Kegiatan warga"
         OPERASIONAL = "operasional", "Operasional & ATK"
         PERBAIKAN = "perbaikan", "Perbaikan fasilitas"
+        PENGEMBALIAN = "pengembalian", "Pengembalian lebih bayar"
         LAINNYA = "lainnya", "Lainnya"
 
     # Kategori yang hanya masuk akal untuk pemasukan

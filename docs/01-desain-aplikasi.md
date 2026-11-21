@@ -55,6 +55,13 @@ Catatan:
 - **Status tagihan:** `belum_bayar` → `menunggu_verifikasi` (warga sudah unggah bukti) → `lunas`. Jika bukti ditolak, status kembali ke `belum_bayar` dengan alasan penolakan.
 - **Pengurus mencatat pembayaran:** pilih KK, centang bulan yang dibayar, lalu pilih metode (tunai / transfer / QRIS). Satu pembayaran bisa melunasi beberapa bulan sekaligus.
 - **Warga mengunggah bukti:** pilih bulan yang dibayar, unggah foto/screenshot transfer, isi nominal dan tanggal transfer, lalu kirim. Pengurus mendapat notifikasi.
+- **Bayar beberapa bulan sekaligus & bayar di muka:** satu bukti transfer (atau satu catatan tunai) boleh mencakup beberapa bulan, termasuk sampai **12 bulan ke depan**. Tagihan bulan mendatang dibuat saat dipilih, dengan tarif yang berlaku saat itu; jika tarif naik kemudian, bulan yang sudah dibayar tetap lunas. Pembuatan tagihan bulanan otomatis tidak menggandakannya.
+- **Lebih/kurang bayar dan saldo titipan:**
+  - Kas mencatat **uang yang benar-benar diterima**, bukan total tagihan. Saat verifikasi, pengurus bisa mengoreksi nominal sesuai mutasi rekening.
+  - Uang + saldo titipan KK dialokasikan **per bulan utuh, mulai dari bulan tertua**. Satu bulan baru lunas jika semua jenis iurannya tertutup.
+  - **Lebih bayar:** sisanya menjadi **saldo titipan** KK dan otomatis melunasi tagihan berikutnya (termasuk saat tagihan bulanan dibuat). Pembayaran dari titipan tercatat dengan metode "titipan" dan nominal 0, karena uangnya sudah masuk kas sebelumnya. Pengurus juga bisa memilih **mengembalikan kelebihan**, yang dicatat sebagai pengeluaran kas kategori "Pengembalian lebih bayar".
+  - **Kurang bayar:** bulan yang tidak tertutup tetap belum bayar, dan uangnya disimpan sebagai titipan sampai cukup. Tagihan bulan mendatang yang tidak tertutup dihapus.
+  - Warga dan pengurus melihat pratinjau ("pas / lebih → titipan / kurang Rp…") sebelum mengirim atau menerima. Saldo titipan tampil di Beranda warga, Riwayat iuran, dan Rekap (pengurus).
 - **Rekap:**
   - *Per warga:* riwayat semua tagihan dan pembayaran satu KK beserta total tunggakan.
   - *Keseluruhan:* tabel matriks rumah × bulan (✅ lunas / ⏳ menunggu / ❌ belum), total pemasukan per bulan, dan persentase kepatuhan.
@@ -121,14 +128,14 @@ Nama tabel di bawah mengikuti model Django (tabel fisiknya berawalan nama app, m
 | Model (app) | Kolom utama |
 |---|---|
 | `User` (accounts) | username, first_name, phone, email, password, role (`admin`/`pengurus`/`warga`), resident (1-1), is_active |
-| `Household` (residents) | no_kk 🔒, block, house_number, address, occupancy (`pemilik`/`kontrak`/`kos`), residence_status (`menetap`/`singgah`), since, is_active |
+| `Household` (residents) | no_kk 🔒, block, house_number, address, occupancy (`pemilik`/`kontrak`/`kos`), residence_status (`menetap`/`singgah`), since, is_active, credit (saldo titipan) |
 | `Registration` (residents) | user (nonaktif s.d. disetujui), name, house_label, payload 🔒 (JSON rumah + anggota, dihapus setelah diproses), status, review_note, reviewed_by, household |
 | `CashEntry` (finance) | kind (`pemasukan`/`pengeluaran`), category, description, amount, date, receipt 🔒, recorded_by |
 | `Resident` (residents) | household, nik 🔒, name, gender, birth_place, birth_date, religion, marital_status, relation, occupation, phone, status (`aktif`/`pindah`/`meninggal`) |
 | `ChangeRequest` (residents) | household, resident (opsional), requested_by, changes (json `{field: {old, new}}`), note, status (`pending`/`disetujui`/`ditolak`), review_note, reviewed_by, reviewed_at |
 | `FeeType` (dues) | name, amount, period (`bulanan`/`sekali`), description, is_active |
 | `Bill` (dues) | household, fee_type, period (`YYYY-MM`), amount, status (`belum_bayar`/`menunggu_verifikasi`/`lunas`), payment |
-| `Payment` (dues) | household, total, method (`tunai`/`transfer`/`qris`), paid_at, recorded_by, note |
+| `Payment` (dues) | household, total (uang yang benar-benar diterima), credit_change (± saldo titipan), refund, method (`tunai`/`transfer`/`qris`/`titipan`), paid_at, recorded_by, note |
 | `PaymentProof` (dues) | household, uploaded_by, bills (banyak-ke-banyak), file 🔒, amount, transfer_date, method, note, status (`pending`/`diterima`/`ditolak`), review_note, verified_by, payment |
 | `Post` (posts) | type (`berita`/`kegiatan`), title, body, event_at, location, is_pinned, is_published, published_at, author |
 | `AuditLog` (core) | user, action, target, data (json), created_at |
@@ -210,9 +217,10 @@ Semua endpoint ada di bawah `/api/v1` (Django REST Framework) dan memakai sessio
 | GET/POST | `/change-requests`, `/change-requests/{id}/approve`, `/change-requests/{id}/reject` | pengurus+ |
 | GET | `/bills?household_id=&period=` | pengurus+ (warga: otomatis difilter ke KK sendiri) |
 | GET | `/bills/summary?year=` | semua (warga mendapat versi ringkas) |
-| POST | `/payments` | pengurus+ |
+| POST | `/payments` (`bills`, `periods` bayar di muka, `amount` uang diterima, `refund_excess`) | pengurus+ |
 | POST | `/payment-proofs` | semua |
-| POST | `/payment-proofs/{id}/approve`, `/payment-proofs/{id}/reject` | pengurus+ |
+| POST | `/payment-proofs/{id}/approve` (opsional `amount` uang masuk, `refund_excess`), `/payment-proofs/{id}/reject` | pengurus+ |
+| GET | `/bills/prepay-options/?household=` (bulan bayar di muka, tarif, saldo titipan) | semua (warga: KK sendiri) |
 | GET | `/posts`, `/posts/{id}` | semua |
 | POST/PUT/DELETE | `/posts`, `/posts/{id}` | pengurus+ |
 | POST | `/auth/register/` | publik (dibatasi 5×/jam per IP) |

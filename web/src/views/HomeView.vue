@@ -98,11 +98,12 @@ onMounted(load)
           </div>
           <div class="text-2xl font-bold">{{ rp(data.me.current_bills.reduce((s, b) => s + b.amount, 0)) }}</div>
           <div class="text-sm text-muted">{{ data.me.current_bills.map((b) => b.fee_type_name).join(' + ') || 'Tagihan bulan ini belum dibuat' }}</div>
+          <p v-if="data.me.credit" class="mt-2 text-sm text-primary">Saldo titipan: <b>{{ rp(data.me.credit) }}</b></p>
           <p v-if="data.me.arrears_total" class="mt-2 text-sm font-semibold text-bad">
             Belum dibayar: {{ data.me.arrears_months }} bulan ({{ rp(data.me.arrears_total) }})
           </p>
           <div class="mt-4 flex gap-2">
-            <RouterLink v-if="data.me.arrears_total" to="/iuran?tab=unggah" class="btn btn-primary"><AppIcon name="upload" :size="18" />Unggah bukti bayar</RouterLink>
+            <RouterLink to="/iuran?tab=unggah" class="btn" :class="{ 'btn-primary': data.me.arrears_total > 0 }"><AppIcon name="upload" :size="18" />{{ data.me.arrears_total ? 'Unggah bukti bayar' : 'Bayar di muka' }}</RouterLink>
             <RouterLink to="/iuran?tab=riwayat" class="btn">Riwayat</RouterLink>
           </div>
         </section>

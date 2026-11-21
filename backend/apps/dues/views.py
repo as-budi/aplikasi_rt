@@ -1,4 +1,5 @@
 import django_filters
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -72,6 +73,27 @@ class BillViewSet(viewsets.ReadOnlyModelViewSet):
         created = services.generate_bills(period)
         return Response({"period": period, "created": created})
 
+    @action(detail=False, url_path="prepay-options")
+    def prepay_options(self, request):
+        """Bulan mendatang yang bisa dibayar di muka oleh KK (belum ada tagihannya) + tarif saat ini."""
+        from apps.residents.models import Household
+
+        if is_staff_rt(request.user) and request.query_params.get("household"):
+            household = Household.objects.filter(pk=request.query_params["household"]).first()
+        else:
+            household = request.user.household
+        if not household:
+            return Response({"periods": [], "fees": [], "credit": 0})
+        fees = list(FeeType.objects.filter(is_active=True, period=FeeType.Period.BULANAN))
+        existing = set(Bill.objects.filter(household=household, period__gt=current_period()).values_list("period", flat=True))
+        periods = [p for p in (services.add_months(current_period(), i) for i in range(1, services.MAX_PREPAY_MONTHS + 1)) if p not in existing]
+        return Response({
+            "periods": periods,
+            "fees": [{"name": f.name, "amount": f.amount} for f in fees],
+            "monthly_total": sum(f.amount for f in fees),
+            "credit": household.credit,
+        })
+
 
 class PaymentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):
     serializer_class = PaymentSerializer
@@ -90,10 +112,12 @@ class PaymentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         ser = PaymentCreateSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
-        payment = services.record_payment(
-            household=d["household"], bill_ids=d["bills"], method=d["method"],
-            paid_at=d["paid_at"], user=request.user, note=d["note"],
-        )
+        with transaction.atomic():  # tagihan bayar di muka ikut dibatalkan bila pencatatan gagal
+            payment = services.record_payment(
+                household=d["household"], bill_ids=d["bills"] + services.ensure_future_bills(d["household"], d["periods"]),
+                method=d["method"], paid_at=d["paid_at"], user=request.user, note=d["note"],
+                amount=d["amount"], refund_excess=d["refund_excess"],
+            )
         return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
 
 
@@ -117,12 +141,22 @@ class PaymentProofViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixi
         proof = services.submit_proof(
             household=household, user=request.user, bill_ids=d["bills"], file=d["file"],
             amount=d["amount"], transfer_date=d["transfer_date"], method=d["method"], note=d["note"],
+            periods=d["periods"],
         )
         return Response(PaymentProofSerializer(proof).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], permission_classes=[IsStaffRT])
     def approve(self, request, pk=None):
-        proof = services.approve_proof(self.get_object(), request.user, request.data.get("review_note", ""))
+        refund = str(request.data.get("refund_excess", "")).lower() in ("1", "true", "yes")
+        amount = request.data.get("amount")
+        if amount not in (None, ""):
+            try:
+                amount = int(amount)
+            except (TypeError, ValueError):
+                raise ValidationError({"amount": "Nominal tidak valid."})
+            if amount < 0:
+                raise ValidationError({"amount": "Nominal tidak boleh negatif."})
+        proof = services.approve_proof(self.get_object(), request.user, request.data.get("review_note", ""), amount, refund)
         return Response(self.get_serializer(proof).data)
 
     @action(detail=True, methods=["post"], permission_classes=[IsStaffRT])

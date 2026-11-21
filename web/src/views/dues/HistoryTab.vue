@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { errMsg, fetchAll } from '@/api/http'
-import type { Bill, BillStatus } from '@/api/types'
+import { errMsg, fetchAll, http } from '@/api/http'
+import type { Bill, BillStatus, PrepayOptions } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { currentYear, dateLabel, periodLabel, rp } from '@/utils/format'
 import { METHOD } from '@/utils/labels'
@@ -17,6 +17,7 @@ const auth = useAuthStore()
 const year = ref(currentYear())
 const years = [currentYear(), currentYear() - 1, currentYear() - 2]
 const bills = ref<Bill[]>([])
+const credit = ref(0)
 const loading = ref(false)
 const error = ref('')
 
@@ -43,7 +44,12 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    bills.value = await fetchAll<Bill>('/bills/', { household: target.value, year: year.value })
+    const [b, o] = await Promise.all([
+      fetchAll<Bill>('/bills/', { household: target.value, year: year.value }),
+      http.get<PrepayOptions>('/bills/prepay-options/', { params: { household: target.value } }),
+    ])
+    bills.value = b
+    credit.value = o.data.credit
   } catch (e) {
     error.value = errMsg(e)
   } finally {
@@ -64,11 +70,16 @@ watch([target, year], load, { immediate: true })
     {{ auth.isStaff ? 'Pilih KK untuk melihat riwayat iurannya.' : 'Akun Anda belum terhubung ke data warga. Hubungi pengurus RT.' }}
   </p>
   <LoadState v-else :loading="loading" :error="error" :empty="!bills.length" :empty-text="`Belum ada tagihan pada ${year}.`" @retry="load">
-    <div class="mb-4 grid grid-cols-2 gap-3">
+    <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3">
       <div class="card"><div class="text-sm text-muted">Dibayar {{ year }}</div><div class="text-xl font-bold">{{ rp(paid) }}</div></div>
       <div class="card">
         <div class="text-sm text-muted">Belum dibayar</div>
         <div class="text-xl font-bold" :class="{ 'text-bad': unpaid > 0 }">{{ rp(unpaid) }}</div>
+      </div>
+      <div class="card col-span-2 md:col-span-1">
+        <div class="text-sm text-muted">Saldo titipan</div>
+        <div class="text-xl font-bold" :class="{ 'text-primary': credit > 0 }">{{ rp(credit) }}</div>
+        <div class="text-xs text-muted">otomatis dipakai untuk tagihan berikutnya</div>
       </div>
     </div>
     <div class="card">

@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { errMsg, fetchAll, http } from '@/api/http'
 import type { PaymentProof } from '@/api/types'
 import { useToast } from '@/stores/toast'
 import { dateLabel, initials, periodLabel, rp } from '@/utils/format'
 import { METHOD } from '@/utils/labels'
+import AllocationNote from '@/components/AllocationNote.vue'
 import BaseModal from '@/components/BaseModal.vue'
+import { previewAllocation } from '@/utils/allocation'
 import LoadState from '@/components/LoadState.vue'
 
 const toast = useToast()
@@ -14,7 +16,11 @@ const loading = ref(true)
 const error = ref('')
 const current = ref<PaymentProof | null>(null)
 const note = ref('')
+const received = ref(0)
+const refund = ref(false)
 const busy = ref(false)
+const items = computed(() => current.value?.bills.map((b) => ({ period: b.period, amount: b.amount })) ?? [])
+const alloc = computed(() => previewAllocation(items.value, received.value, current.value?.household_credit ?? 0))
 
 async function load() {
   loading.value = true
@@ -34,14 +40,19 @@ const months = (p: PaymentProof) => [...new Set(p.bills.map((b) => periodLabel(b
 function open(p: PaymentProof) {
   current.value = p
   note.value = ''
+  received.value = p.amount
+  refund.value = false
 }
 
 async function decide(action: 'approve' | 'reject') {
   if (!current.value) return
   busy.value = true
   try {
-    await http.post(`/payment-proofs/${current.value.id}/${action}/`, { review_note: note.value })
-    toast.ok(action === 'approve' ? 'Pembayaran diterima, tagihan lunas' : 'Bukti ditolak, warga bisa mengunggah ulang')
+    const body = action === 'approve'
+      ? { review_note: note.value, amount: received.value, refund_excess: refund.value && alloc.value.refundable > 0 }
+      : { review_note: note.value }
+    await http.post(`/payment-proofs/${current.value.id}/${action}/`, body)
+    toast.ok(action === 'approve' ? 'Pembayaran diterima dan dicatat di kas' : 'Bukti ditolak, warga bisa mengunggah ulang')
     current.value = null
     load()
   } catch (e) {
@@ -82,18 +93,28 @@ onMounted(load)
           <dd class="text-right font-semibold">{{ months(current) }} ({{ current.bills.length }} item, {{ rp(billTotal(current)) }})</dd>
         </div>
         <div class="flex justify-between py-2">
-          <dt class="text-muted">Nominal transfer</dt>
-          <dd class="font-semibold" :class="current.amount !== billTotal(current) && 'text-warn'">
-            {{ rp(current.amount) }}<template v-if="current.amount !== billTotal(current)"> (tidak sama)</template>
-          </dd>
+          <dt class="text-muted">Nominal ditulis warga</dt>
+          <dd class="font-semibold">{{ rp(current.amount) }}</dd>
+        </div>
+        <div v-if="current.household_credit" class="flex justify-between py-2">
+          <dt class="text-muted">Saldo titipan KK</dt>
+          <dd class="font-semibold">{{ rp(current.household_credit) }}</dd>
         </div>
         <div class="flex justify-between py-2"><dt class="text-muted">Tanggal / metode</dt><dd class="font-semibold">{{ dateLabel(current.transfer_date) }} · {{ METHOD[current.method] }}</dd></div>
         <div v-if="current.note" class="py-2"><dt class="text-muted">Catatan warga</dt><dd>{{ current.note }}</dd></div>
       </dl>
+      <label class="field">
+        <span>Uang yang benar-benar masuk (cek mutasi rekening)</span>
+        <input v-model.number="received" class="input" type="number" min="0" />
+      </label>
+      <AllocationNote :items="items" :received="received" :credit="current.household_credit" :refund="refund" />
+      <label v-if="alloc.refundable > 0" class="mb-4 flex items-center gap-2 text-sm">
+        <input v-model="refund" type="checkbox" /> Kembalikan kelebihan {{ rp(alloc.refundable) }} ke warga (bukan titipan)
+      </label>
       <label class="field"><span>Catatan (wajib jika ditolak)</span><input v-model="note" class="input" placeholder="mis. nominal tidak sesuai" /></label>
       <div class="flex gap-2">
         <button class="btn btn-danger flex-1" :disabled="busy" @click="decide('reject')">Tolak</button>
-        <button class="btn btn-primary flex-[2]" :disabled="busy" @click="decide('approve')">Terima — tandai lunas</button>
+        <button class="btn btn-primary flex-[2]" :disabled="busy" @click="decide('approve')">Terima pembayaran</button>
       </div>
     </template>
   </BaseModal>

@@ -33,9 +33,15 @@ class Payment(models.Model):
         TUNAI = "tunai", "Tunai"
         TRANSFER = "transfer", "Transfer"
         QRIS = "qris", "QRIS"
+        TITIPAN = "titipan", "Saldo titipan"  # dibuat sistem, total 0 (uangnya sudah masuk sebelumnya)
+
+    # Metode yang bisa dipilih manusia
+    MANUAL_METHODS = [Method.TUNAI, Method.TRANSFER, Method.QRIS]
 
     household = models.ForeignKey("residents.Household", on_delete=models.PROTECT, related_name="payments")
-    total = models.PositiveIntegerField("Total (Rp)")
+    total = models.PositiveIntegerField("Uang diterima (Rp)", help_text="Uang yang benar-benar masuk kas, bukan total tagihan.")
+    credit_change = models.IntegerField("Perubahan saldo titipan (Rp)", default=0)
+    refund = models.PositiveIntegerField("Dikembalikan ke warga (Rp)", default=0)
     method = models.CharField("Metode", max_length=10, choices=Method.choices)
     paid_at = models.DateField("Tanggal bayar")
     recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")

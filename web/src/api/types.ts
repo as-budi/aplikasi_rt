@@ -60,6 +60,7 @@ export interface HouseholdListItem {
   member_count: number
   no_kk_masked: string
   current_status: BillStatus | null
+  credit: number
 }
 
 export interface HouseholdDetail extends HouseholdListItem {
@@ -79,6 +80,7 @@ export interface HouseholdOwn {
   residence_status: ResidenceStatus
   since: string | null
   no_kk_masked: string
+  credit: number
   members: Resident[]
 }
 
@@ -145,6 +147,7 @@ export interface PaymentProof {
   household: number
   household_label: string
   head_name: string
+  household_credit: number
   uploaded_by_name: string | null
   bills: BillMini[]
   amount: number
@@ -169,6 +172,7 @@ export interface Summary {
     head_name: string
     cells: Record<string, BillStatus | null>
     arrears?: number
+    credit?: number
   }[]
   income?: Record<string, number>
 }
@@ -198,6 +202,7 @@ export interface Dashboard {
     current_bills: Bill[]
     arrears_total: number
     arrears_months: number
+    credit: number
   } | null
   staff: {
     households: number
@@ -285,4 +290,12 @@ export interface LedgerRow {
   receipt_url: string | null
   recorded_by_name: string | null
   household_id: number | null
+}
+
+/** Bulan mendatang yang bisa dibayar di muka oleh satu KK */
+export interface PrepayOptions {
+  periods: string[]
+  fees: { name: string; amount: number }[]
+  monthly_total: number
+  credit: number
 }

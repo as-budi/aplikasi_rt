@@ -34,11 +34,17 @@ class LoginView(APIView):
             or User.objects.filter(phone=ident).first()
             or User.objects.filter(email__iexact=ident).first()
         )
-        if not user or not user.is_active or not user.check_password(ser.validated_data["password"]):
-            return Response(
-                {"detail": "Username/No. HP atau kata sandi salah."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        wrong = Response({"detail": "Username/No. HP atau kata sandi salah."}, status=status.HTTP_400_BAD_REQUEST)
+        if not user or not user.check_password(ser.validated_data["password"]):
+            return wrong
+        if not user.is_active:
+            # Beri tahu status pendaftaran hanya kepada pemilik akun (kata sandi sudah benar)
+            reg = getattr(user, "registration", None)
+            if reg and reg.status == "pending":
+                return Response({"detail": "Pendaftaran Anda sedang menunggu aktivasi oleh pengurus RT."}, status=status.HTTP_403_FORBIDDEN)
+            if reg and reg.status == "ditolak":
+                return Response({"detail": f"Pendaftaran ditolak pengurus RT: {reg.review_note}"}, status=status.HTTP_403_FORBIDDEN)
+            return wrong
         login(request, user)
         return Response(MeSerializer(user).data)
 

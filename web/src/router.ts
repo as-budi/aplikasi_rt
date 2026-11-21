@@ -15,6 +15,7 @@ const router = createRouter({
   scrollBehavior: () => ({ top: 0 }),
   routes: [
     { path: '/login', component: () => import('@/views/LoginView.vue'), meta: { public: true, title: 'Masuk' } },
+    { path: '/daftar', component: () => import('@/views/RegisterView.vue'), meta: { public: true, title: 'Daftar Warga Baru' } },
     {
       path: '/',
       component: AppLayout,
@@ -25,6 +26,8 @@ const router = createRouter({
         { path: 'saya', component: () => import('@/views/MyDataView.vue'), meta: { title: 'Data Saya' } },
         { path: 'pengajuan', component: () => import('@/views/ChangeRequestsView.vue'), meta: { title: 'Pengajuan Perubahan', staff: true } },
         { path: 'iuran', component: () => import('@/views/DuesView.vue'), meta: { title: 'Iuran' } },
+        { path: 'kas', component: () => import('@/views/CashView.vue'), meta: { title: 'Kas RT' } },
+        { path: 'pendaftaran', component: () => import('@/views/RegistrationsView.vue'), meta: { title: 'Pendaftaran Warga Baru', staff: true } },
         { path: 'berita', component: () => import('@/views/PostsView.vue'), meta: { title: 'Berita & Kegiatan' } },
         { path: 'berita/baru', component: () => import('@/views/PostFormView.vue'), meta: { title: 'Buat Posting', staff: true } },
         { path: 'berita/:id', component: () => import('@/views/PostDetailView.vue'), meta: { title: 'Berita & Kegiatan' } },

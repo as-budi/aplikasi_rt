@@ -10,8 +10,11 @@ from apps.residents.models import Household, Resident
 
 @pytest.fixture(autouse=True)
 def _media_tmp(settings, tmp_path):
+    from django.core.cache import cache
+
     settings.MEDIA_ROOT = tmp_path / "media"
     settings.USE_X_ACCEL_REDIRECT = False
+    cache.clear()  # penghitung throttle (login/daftar) tidak terbawa antar tes
 
 
 def make_household(block="A", number="1", head="Budi Santoso", nik="3201000000000011"):

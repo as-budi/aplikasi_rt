@@ -12,8 +12,10 @@ from PIL import Image, ImageDraw, ImageFont
 from apps.accounts.models import User
 from apps.dues.models import Bill, FeeType
 from apps.dues.services import generate_bills, record_payment, submit_proof
+from apps.finance.models import CashEntry
 from apps.posts.models import Post
-from apps.residents.models import ChangeRequest, Household, Resident
+from apps.residents.models import ChangeRequest, Household, Registration, Resident
+from apps.residents.registration import register
 
 PASSWORD = "rtkita123"
 K, I, S, A = Resident.Relation.KEPALA, Resident.Relation.ISTRI, Resident.Relation.SUAMI, Resident.Relation.ANAK
@@ -64,9 +66,54 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **options):
         if Household.objects.exists():
-            self.stdout.write(self.style.WARNING("Data sudah ada, seed dilewati. (Kosongkan dengan: docker compose down -v)"))
-            return
+            self.stdout.write(self.style.WARNING("Data inti sudah ada, dilewati. (Kosongkan dengan: docker compose down -v)"))
+        else:
+            self.seed_core()
+        self.seed_extras()
 
+    def seed_extras(self):
+        """Kas RT, rumah singgah, dan pendaftaran menunggu — ditambahkan bila belum ada."""
+        today = timezone.localdate()
+        Household.objects.filter(block="B", house_number="3").update(residence_status="singgah")
+
+        if not CashEntry.objects.exists():
+            recorder = User.objects.filter(username="bendahara").first()
+            entry = lambda kind, cat, desc, amount, d: CashEntry.objects.create(  # noqa: E731
+                kind=kind, category=cat, description=desc, amount=amount, date=d, recorded_by=recorder
+            )
+            entry("pemasukan", "saldo_awal", f"Saldo kas akhir {today.year - 1}", 2_500_000, date(today.year - 1, 12, 31))
+            for m in range(1, today.month + 1):
+                entry("pengeluaran", "kebersihan", "Honor petugas sampah", 150_000, date(today.year, m, 25))
+                entry("pengeluaran", "keamanan", "Honor ronda malam", 200_000, date(today.year, m, 26))
+            extras = [
+                (5, "pengeluaran", "perbaikan", "Ganti 3 lampu jalan Blok B", 350_000),
+                (8, "pemasukan", "donasi", "Sumbangan warga untuk 17 Agustus", 500_000),
+                (8, "pengeluaran", "kegiatan", "Lomba & hadiah 17 Agustus", 750_000),
+                (10, "pengeluaran", "sosial", "Santunan warga sakit (C-1)", 300_000),
+                (11, "pengeluaran", "operasional", "Fotokopi & ATK rapat warga", 45_000),
+            ]
+            for month, kind, cat, desc, amount in extras:
+                if month <= today.month:
+                    entry(kind, cat, desc, amount, date(today.year, month, 15))
+            self.stdout.write("Transaksi kas contoh dibuat.")
+
+        if not Registration.objects.exists():
+            register({
+                "username": "andi", "password": PASSWORD, "phone": "081377778888", "email": "",
+                "household": {"no_kk": "3201000000000009", "block": "C", "house_number": "3", "address": "",
+                              "occupancy": "kontrak", "residence_status": "menetap", "since": date(today.year, today.month, 1)},
+                "members": [
+                    {"name": "Andi Saputra", "nik": "3201091504900001", "gender": "L", "relation": "kepala_keluarga",
+                     "birth_place": "Bandung", "birth_date": date(1990, 4, 15), "religion": "Islam",
+                     "marital_status": "Kawin", "occupation": "Guru", "phone": "081377778888"},
+                    {"name": "Rani Saputra", "nik": "3201094809920002", "gender": "P", "relation": "istri",
+                     "birth_place": "Bogor", "birth_date": date(1992, 9, 8), "religion": "Islam",
+                     "marital_status": "Kawin", "occupation": "Perawat", "phone": ""},
+                ],
+            })
+            self.stdout.write("Pendaftaran warga baru contoh (andi, menunggu aktivasi) dibuat.")
+
+    def seed_core(self):
         today = timezone.localdate()
         fees = [
             FeeType.objects.create(name="Kebersihan", amount=20000, description="Petugas sampah & kebersihan selokan"),
@@ -80,6 +127,7 @@ class Command(BaseCommand):
         for idx, (block, number, occupancy, username, members) in enumerate(HOUSEHOLDS, start=1):
             hh = Household.objects.create(
                 block=block, house_number=number, occupancy=occupancy, no_kk=f"3201{idx:012d}",
+                residence_status="singgah" if (block, number) == ("B", "3") else "menetap",
                 since=date(2012 + idx, (idx % 12) + 1, 1),
             )
             households[hh.label] = hh
@@ -163,3 +211,4 @@ class Command(BaseCommand):
         self.stdout.write("  bendahara -> Pengurus (Dewi Lestari, B-1)")
         self.stdout.write("  budi      -> Warga (Budi Santoso, A-1)")
         self.stdout.write("  rina, yohanes, hendra, slamet, ketut -> Warga")
+        self.stdout.write("  andi      -> pendaftar baru, menunggu aktivasi")

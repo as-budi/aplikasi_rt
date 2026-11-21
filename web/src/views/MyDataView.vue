@@ -4,7 +4,7 @@ import { errMsg, http } from '@/api/http'
 import type { ChangeRequest, HouseholdOwn, Paginated, Resident } from '@/api/types'
 import { useToast } from '@/stores/toast'
 import { dateLabel, initials } from '@/utils/format'
-import { CHANGE_FIELD, GENDER, MARITAL, OCCUPANCY, RELATION, RELIGIONS } from '@/utils/labels'
+import { CHANGE_FIELD, GENDER, MARITAL, OCCUPANCY, RELATION, RELIGIONS, RESIDENCE } from '@/utils/labels'
 import AppIcon from '@/components/AppIcon.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import LoadState from '@/components/LoadState.vue'
@@ -96,9 +96,10 @@ onMounted(load)
       <section class="card mb-4">
         <div class="text-sm text-muted">Keluarga</div>
         <div class="text-lg font-bold">Rumah {{ hh.label }}</div>
-        <dl class="mt-3 grid grid-cols-2 gap-3 text-sm">
+        <dl class="mt-3 grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
           <div><dt class="text-muted">No. KK</dt><dd class="font-semibold">{{ hh.no_kk_masked || '—' }}</dd></div>
           <div><dt class="text-muted">Status hunian</dt><dd class="font-semibold">{{ OCCUPANCY[hh.occupancy] }}</dd></div>
+          <div><dt class="text-muted">Status rumah</dt><dd class="font-semibold">{{ RESIDENCE[hh.residence_status] }}</dd></div>
         </dl>
       </section>
 

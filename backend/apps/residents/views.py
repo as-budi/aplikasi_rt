@@ -7,6 +7,8 @@ from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.accounts.models import User
@@ -15,14 +17,16 @@ from apps.core.permissions import IsStaffRT, is_staff_rt
 from apps.core.utils import current_period
 from apps.dues.models import Bill
 
-from . import services
-from .models import ChangeRequest, Household, Resident
+from . import registration, services
+from .models import ChangeRequest, Household, Registration, Resident
 from .serializers import (
     ChangeRequestSerializer,
     HouseholdDetailSerializer,
     HouseholdListSerializer,
     HouseholdOwnSerializer,
     HouseholdWriteSerializer,
+    RegisterSerializer,
+    RegistrationSerializer,
     ResidentOwnSerializer,
     ResidentSelfUpdateSerializer,
     ResidentSerializer,
@@ -34,7 +38,7 @@ class HouseholdViewSet(viewsets.ModelViewSet):
 
     permission_classes = [IsStaffRT]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    filterset_fields = ["is_active", "block", "occupancy"]
+    filterset_fields = ["is_active", "block", "occupancy", "residence_status"]
     search_fields = ["block", "house_number", "address", "members__name"]
 
     def get_queryset(self):
@@ -174,3 +178,42 @@ class ChangeRequestViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mix
     def reject(self, request, pk=None):
         cr = services.reject_change(self.get_object(), request.user, request.data.get("review_note", ""))
         return Response(self.get_serializer(cr).data)
+
+
+class RegisterView(APIView):
+    """Pendaftaran mandiri warga baru (tanpa login). Akun aktif setelah disetujui pengurus."""
+
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "register"
+
+    def post(self, request):
+        ser = RegisterSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        registration.register(ser.validated_data)
+        return Response(
+            {"detail": "Pendaftaran terkirim. Anda bisa masuk setelah akun diaktifkan oleh pengurus RT."},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RegistrationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    permission_classes = [IsStaffRT]
+    serializer_class = RegistrationSerializer
+    filterset_fields = ["status"]
+
+    def get_queryset(self):
+        return Registration.objects.select_related("user", "reviewed_by", "household")
+
+    @action(detail=True, methods=["post"])
+    def approve(self, request, pk=None):
+        household = None
+        if request.data.get("household"):
+            household = get_object_or_404(Household, pk=request.data["household"], is_active=True)
+        reg = registration.approve(self.get_object(), request.user, household)
+        return Response(self.get_serializer(reg).data)
+
+    @action(detail=True, methods=["post"])
+    def reject(self, request, pk=None):
+        reg = registration.reject(self.get_object(), request.user, request.data.get("review_note", ""))
+        return Response(self.get_serializer(reg).data)

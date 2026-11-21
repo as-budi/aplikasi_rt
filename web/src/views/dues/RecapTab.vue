@@ -5,6 +5,7 @@ import type { Summary } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/stores/toast'
 import { currentPeriod, currentYear, monthShort, periodLabel, rp } from '@/utils/format'
+import ExportButtons from '@/components/ExportButtons.vue'
 import LoadState from '@/components/LoadState.vue'
 import StatusDot from '@/components/StatusDot.vue'
 
@@ -67,6 +68,7 @@ onMounted(load)
         <span class="flex items-center gap-1"><StatusDot status="menunggu_verifikasi" /> Menunggu</span>
         <span class="flex items-center gap-1"><StatusDot status="belum_bayar" /> Belum</span>
         <button v-if="auth.isStaff && year === currentYear()" class="btn btn-sm" @click="generate">Buat tagihan bulan ini</button>
+        <ExportButtons v-if="auth.isStaff" kind="dues" :year="year" />
       </div>
     </div>
     <p v-if="!auth.isStaff" class="mb-3 text-sm text-muted">

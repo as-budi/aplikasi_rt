@@ -2,7 +2,7 @@ FROM python:3.12-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 # Library untuk meng-compile mysqlclient
 RUN apt-get update \
- && apt-get install -y --no-install-recommends build-essential pkg-config default-libmysqlclient-dev \
+ && apt-get install -y --no-install-recommends build-essential pkg-config default-libmysqlclient-dev fonts-dejavu-core \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY requirements.txt .

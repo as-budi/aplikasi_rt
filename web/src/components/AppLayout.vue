@@ -23,7 +23,9 @@ const items = computed<NavItem[]>(() => {
   if (staff) list.push({ to: '/warga', label: 'Data Warga', short: 'Warga', icon: 'users', mobile: true })
   list.push({ to: '/saya', label: 'Data Saya', icon: 'idcard', mobile: !staff })
   if (staff) list.push({ to: '/pengajuan', label: 'Pengajuan Data', icon: 'inbox', mobile: false })
+  if (staff) list.push({ to: '/pendaftaran', label: 'Pendaftaran Baru', icon: 'userplus', mobile: false })
   list.push({ to: '/iuran', label: 'Iuran', icon: 'wallet', mobile: true })
+  list.push({ to: '/kas', label: 'Kas RT', icon: 'cash', mobile: false })
   list.push({ to: '/berita', label: 'Berita & Kegiatan', short: 'Berita', icon: 'news', mobile: true })
   list.push({ to: '/akun', label: 'Akun', icon: 'user', mobile: true })
   return list

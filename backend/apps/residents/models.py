@@ -19,6 +19,13 @@ class Household(models.Model):
     house_number = models.CharField("No. rumah", max_length=10)
     address = models.CharField("Alamat", max_length=200, blank=True)
     occupancy = models.CharField("Status hunian", max_length=10, choices=Occupancy.choices, default=Occupancy.PEMILIK)
+    residence_status = models.CharField(
+        "Status rumah",
+        max_length=10,
+        choices=[("menetap", "Menetap"), ("singgah", "Rumah singgah")],
+        default="menetap",
+        help_text="Menetap: dihuni sehari-hari. Rumah singgah: hanya sesekali ditinggali.",
+    )
     since = models.DateField("Tinggal sejak", null=True, blank=True)
     is_active = models.BooleanField("Aktif", default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -134,3 +141,41 @@ class ChangeRequest(models.Model):
 
     def __str__(self):
         return f"Pengajuan #{self.pk} {self.household.label}"
+
+
+class Registration(models.Model):
+    """Pendaftaran mandiri warga baru. Akun baru aktif setelah disetujui pengurus.
+
+    Data lengkap (termasuk NIK) disimpan terenkripsi di `payload` dan dihapus setelah
+    diproses, karena saat disetujui datanya sudah dipindahkan ke Household/Resident.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Menunggu"
+        APPROVED = "disetujui", "Disetujui"
+        REJECTED = "ditolak", "Ditolak"
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="registration")
+    name = models.CharField("Nama pendaftar", max_length=100)
+    house_label = models.CharField("Rumah", max_length=25)
+    payload = EncryptedCharField("Data pendaftaran", blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    review_note = models.CharField("Catatan pengurus", max_length=255, blank=True)
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    household = models.ForeignKey(Household, null=True, blank=True, on_delete=models.SET_NULL, related_name="registrations")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Pendaftaran warga"
+        verbose_name_plural = "Pendaftaran warga"
+
+    def __str__(self):
+        return f"Pendaftaran {self.name} ({self.house_label})"
+
+    @property
+    def data(self) -> dict:
+        import json
+
+        return json.loads(self.payload) if self.payload else {}

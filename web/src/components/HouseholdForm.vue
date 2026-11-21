@@ -2,7 +2,7 @@
 import { reactive, ref } from 'vue'
 import { errMsg, http } from '@/api/http'
 import type { HouseholdWrite } from '@/api/types'
-import { OCCUPANCY } from '@/utils/labels'
+import { OCCUPANCY, RESIDENCE, RESIDENCE_HINT } from '@/utils/labels'
 
 const props = defineProps<{ initial?: HouseholdWrite }>()
 const emit = defineEmits<{ saved: [id: number] }>()
@@ -13,6 +13,7 @@ const form = reactive<HouseholdWrite>({
   house_number: props.initial?.house_number ?? '',
   address: props.initial?.address ?? '',
   occupancy: props.initial?.occupancy ?? 'pemilik',
+  residence_status: props.initial?.residence_status ?? 'menetap',
   since: props.initial?.since ?? null,
 })
 const error = ref('')
@@ -53,8 +54,14 @@ async function submit() {
           <option v-for="(label, key) in OCCUPANCY" :key="key" :value="key">{{ label }}</option>
         </select>
       </label>
-      <label class="field"><span>Tinggal sejak</span><input v-model="form.since" class="input" type="date" /></label>
+      <label class="field">
+        <span>Status rumah</span>
+        <select v-model="form.residence_status" class="input">
+          <option v-for="(label, key) in RESIDENCE" :key="key" :value="key">{{ label }} — {{ RESIDENCE_HINT[key] }}</option>
+        </select>
+      </label>
     </div>
+    <label class="field"><span>Tinggal sejak</span><input v-model="form.since" class="input" type="date" /></label>
     <p v-if="error" class="mb-3 text-sm text-bad" role="alert">{{ error }}</p>
     <button class="btn btn-primary w-full" :disabled="busy">{{ busy ? 'Menyimpan…' : 'Simpan' }}</button>
   </form>

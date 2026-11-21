@@ -1,5 +1,24 @@
 export const OCCUPANCY: Record<string, string> = { pemilik: 'Pemilik', kontrak: 'Kontrak', kos: 'Kos' }
 
+export const RESIDENCE: Record<string, string> = { menetap: 'Menetap', singgah: 'Rumah singgah' }
+export const RESIDENCE_HINT: Record<string, string> = {
+  menetap: 'Dihuni sehari-hari',
+  singgah: 'Hanya sesekali ditinggali',
+}
+
+export const CASH_CATEGORY: Record<string, string> = {
+  saldo_awal: 'Saldo awal',
+  donasi: 'Donasi / sumbangan',
+  kebersihan: 'Kebersihan',
+  keamanan: 'Keamanan',
+  sosial: 'Sosial / santunan',
+  kegiatan: 'Kegiatan warga',
+  operasional: 'Operasional & ATK',
+  perbaikan: 'Perbaikan fasilitas',
+  lainnya: 'Lainnya',
+}
+export const INCOME_ONLY = ['saldo_awal', 'donasi']
+
 export const RELATION: Record<string, string> = {
   kepala_keluarga: 'Kepala Keluarga',
   suami: 'Suami',

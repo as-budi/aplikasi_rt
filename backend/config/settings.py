@@ -31,6 +31,8 @@ INSTALLED_APPS = [
     "apps.residents",
     "apps.dues",
     "apps.posts",
+    "apps.finance",
+    "apps.reports",
 ]
 
 MIDDLEWARE = [
@@ -106,7 +108,7 @@ REST_FRAMEWORK = {
     "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
     "DEFAULT_PAGINATION_CLASS": "apps.core.pagination.DefaultPagination",
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-    "DEFAULT_THROTTLE_RATES": {"login": "10/min"},
+    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "register": "5/hour"},
 }
 
 SPECTACULAR_SETTINGS = {

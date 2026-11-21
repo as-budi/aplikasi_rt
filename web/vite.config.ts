@@ -36,7 +36,8 @@ export default defineConfig({
           {
             // Data terakhir tetap bisa dibaca saat sinyal hilang (bukan file bukti bayar)
             urlPattern: ({ url, request }) =>
-              url.pathname.startsWith('/api/v1/') && request.method === 'GET' && !url.pathname.endsWith('/file/'),
+              url.pathname.startsWith('/api/v1/') && request.method === 'GET' &&
+              !/\/(file|receipt)\/$/.test(url.pathname) && !url.pathname.startsWith('/api/v1/exports/'),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api',

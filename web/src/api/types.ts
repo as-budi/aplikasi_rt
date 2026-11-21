@@ -3,6 +3,8 @@ export type BillStatus = 'belum_bayar' | 'menunggu_verifikasi' | 'lunas'
 export type ReviewStatus = 'pending' | 'diterima' | 'ditolak' | 'disetujui'
 export type PayMethod = 'tunai' | 'transfer' | 'qris'
 export type PostType = 'berita' | 'kegiatan'
+export type ResidenceStatus = 'menetap' | 'singgah'
+export type CashKind = 'pemasukan' | 'pengeluaran'
 
 export interface Paginated<T> {
   count: number
@@ -51,6 +53,7 @@ export interface HouseholdListItem {
   house_number: string
   address: string
   occupancy: string
+  residence_status: ResidenceStatus
   is_active: boolean
   head_name: string
   head_phone: string
@@ -73,6 +76,7 @@ export interface HouseholdOwn {
   house_number: string
   address: string
   occupancy: string
+  residence_status: ResidenceStatus
   since: string | null
   no_kk_masked: string
   members: Resident[]
@@ -85,6 +89,7 @@ export interface HouseholdWrite {
   house_number: string
   address: string
   occupancy: string
+  residence_status: ResidenceStatus
   since: string | null
   is_active?: boolean
 }
@@ -203,8 +208,66 @@ export interface Dashboard {
     target: number
     pending_proofs: number
     pending_changes: number
+    pending_registrations: number
     top_arrears: { household_id: number; label: string; head_name: string; months: number; total: number }[]
   } | null
+  cash_balance: number
   upcoming_events: Post[]
   latest_news: Post[]
+}
+
+export interface CashEntry {
+  id: number
+  kind: CashKind
+  kind_label: string
+  category: string
+  category_label: string
+  description: string
+  amount: number
+  date: string
+  receipt_url: string | null
+  recorded_by_name: string | null
+  created_at: string
+}
+
+export interface CashReport {
+  year: number
+  opening_balance: number
+  closing_balance: number
+  totals: { iuran: number; other_income: number; expense: number }
+  months: { period: string; iuran: number; other_income: number; expense: number; balance: number }[]
+  expense_by_category: { category: string; label: string; amount: number }[]
+}
+
+export interface RegisterMember {
+  name: string
+  nik: string
+  gender: 'L' | 'P'
+  birth_place: string
+  birth_date: string | null
+  religion: string
+  marital_status: string
+  relation: string
+  occupation: string
+  phone: string
+}
+
+export interface Registration {
+  id: number
+  name: string
+  house_label: string
+  username: string
+  phone: string
+  status: 'pending' | 'disetujui' | 'ditolak'
+  review_note: string
+  reviewed_by_name: string | null
+  reviewed_at: string | null
+  household: number | null
+  household_label: string | null
+  data: {
+    household?: { no_kk: string; block: string; house_number: string; address: string; occupancy: string; residence_status: ResidenceStatus; since: string | null }
+    members?: RegisterMember[]
+  }
+  matching_household: { id: number; label: string; head_name: string } | null
+  created_at: string
 }

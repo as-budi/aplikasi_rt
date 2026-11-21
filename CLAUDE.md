@@ -33,6 +33,9 @@ Healthcheck MySQL harus memakai `-h 127.0.0.1` (TCP). Ping lewat socket sudah su
   - `residents`: `Household` (KK), `Resident`, `ChangeRequest`; `services.py` berisi alur perubahan data oleh warga.
   - `dues`: `FeeType`, `Bill`, `Payment`, `PaymentProof`; **semua perubahan status tagihan lewat `dues/services.py`** (`generate_bills`, `record_payment`, `submit_proof`, `approve_proof`, `reject_proof`, `bill_summary`). Celery beat menjalankan `generate_monthly_bills` tiap tanggal 1.
   - `posts`: `Post` (berita/kegiatan).
+  - `finance`: `CashEntry` (pemasukan lain & pengeluaran). `services.cash_report()` menghitung iuran dari `Payment.paid_at`, jadi **iuran tidak pernah dicatat sebagai CashEntry**. Semua user yang login boleh membaca; hanya pengurus yang menulis.
+  - `reports`: ekspor `GET /api/v1/exports/<residents|dues|cash>/?file=xlsx|pdf`. Pakai parameter `file`, bukan `format`, karena `format` dipakai DRF untuk content negotiation. `documents.py` menyusun tabel, lalu `render.py` menulis openpyxl/reportlab. Font DejaVu dari paket apt `fonts-dejavu-core` dipakai untuk ✓ ✕ ….
+  - `residents/registration.py`: pendaftaran mandiri (`POST /auth/register/`, user `is_active=False`, payload terenkripsi di `Registration`) → `approve()` membuat KK/anggota atau menggabungkan ke KK yang ada → payload dikosongkan.
 - `web/` (Vue 3 + Vite + TS + Tailwind v4 + Pinia, PWA via `vite-plugin-pwa`). `src/api/http.ts` berisi axios + `errMsg()` + `fetchAll()`; `src/stores/auth.ts` menyimpan user aktif; `src/router.ts` memakai `meta.staff` untuk halaman pengurus. Satu layout (`components/AppLayout.vue`): sidebar di ≥768px dan navigasi bawah di HP. Warna lewat token CSS di `src/style.css` (`bg-surface`, `text-muted`, `bg-primary-soft`, …; dark mode otomatis). Tab iuran ada di `views/dues/`.
 - Produksi: `compose.prod.yaml` + `docker/nginx/` (image nginx berisi PWA hasil build, proxy `/api` & `/admin`, `/protected-media/` internal). Di VPS, Nginx host hanya menangani TLS dan memproksi ke `127.0.0.1:8081`.
 
@@ -47,3 +50,6 @@ Healthcheck MySQL harus memakai `-h 127.0.0.1` (TCP). Ping lewat socket sudah su
 - Uang = integer rupiah. `TIME_ZONE="Asia/Jakarta"`, `USE_TZ=True`. Hindari lookup `__date`/`__month` pada DateTimeField (tabel zona waktu MySQL tidak dimuat).
 - `is_superuser` ⇒ `role=admin` dan sebaliknya (`User.save`). Admin mengelola pengguna, jenis iuran, dan log lewat Django Admin.
 - Setiap aksi tulis penting memanggil `audit(user, aksi, objek, **detail)`.
+- Login user nonaktif hanya membocorkan status pendaftaran jika kata sandinya benar (lihat `LoginView`).
+- Endpoint publik hanya `auth/csrf`, `auth/login`, dan `auth/register` (throttle `login` 10/menit, `register` 5/jam). Tes membersihkan cache di `conftest.py` agar throttle tidak terbawa antar tes.
+- `Household.residence_status`: `menetap`/`singgah`, terpisah dari `occupancy` (pemilik/kontrak/kos).

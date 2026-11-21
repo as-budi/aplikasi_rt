@@ -5,7 +5,7 @@ import { errMsg, http } from '@/api/http'
 import type { HouseholdDetail, Resident } from '@/api/types'
 import { useToast } from '@/stores/toast'
 import { dateLabel, initials } from '@/utils/format'
-import { GENDER, OCCUPANCY, RELATION, RESIDENT_STATUS } from '@/utils/labels'
+import { GENDER, OCCUPANCY, RELATION, RESIDENCE, RESIDENT_STATUS } from '@/utils/labels'
 import AppIcon from '@/components/AppIcon.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import HouseholdForm from '@/components/HouseholdForm.vue'
@@ -111,15 +111,19 @@ onMounted(load)
           <span class="avatar size-13! text-lg!">{{ initials(hh.head_name) }}</span>
           <div class="min-w-0 flex-1">
             <div class="text-lg font-bold">{{ hh.head_name }}</div>
-            <div class="text-sm text-muted">Rumah {{ hh.label }} · {{ OCCUPANCY[hh.occupancy] }}</div>
+            <div class="text-sm text-muted">
+              Rumah {{ hh.label }} · {{ OCCUPANCY[hh.occupancy] }}
+              <span v-if="hh.residence_status === 'singgah'" class="badge badge-warn ml-1">Rumah singgah</span>
+            </div>
           </div>
           <span v-if="!hh.is_active" class="badge badge-muted">Nonaktif</span>
           <StatusBadge v-else :status="hh.current_status" />
         </div>
         <dl class="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
           <div><dt class="text-muted">No. KK</dt><dd class="font-semibold">{{ hh.no_kk || '—' }}</dd></div>
+          <div><dt class="text-muted">Status rumah</dt><dd class="font-semibold">{{ RESIDENCE[hh.residence_status] }}</dd></div>
           <div><dt class="text-muted">Tinggal sejak</dt><dd class="font-semibold">{{ dateLabel(hh.since) }}</dd></div>
-          <div class="col-span-2"><dt class="text-muted">Alamat</dt><dd class="font-semibold">{{ hh.address || '—' }}</dd></div>
+          <div><dt class="text-muted">Alamat</dt><dd class="font-semibold">{{ hh.address || '—' }}</dd></div>
         </dl>
         <div class="mt-4 flex flex-wrap gap-2">
           <button class="btn btn-sm" @click="editingHousehold = true"><AppIcon name="edit" :size="16" />Ubah</button>

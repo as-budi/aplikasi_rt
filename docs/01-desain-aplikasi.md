@@ -29,6 +29,11 @@ Prinsip desain:
 | Unggah bukti pembayaran | ✅ | ✅ | ✅ |
 | Buat / ubah / hapus berita & kegiatan | ✅ | ✅ | ❌ |
 | Baca berita & kegiatan | ✅ | ✅ | ✅ |
+| Lihat laporan Kas RT & unduh laporan kas (Excel/PDF) | ✅ | ✅ | ✅ |
+| Catat / ubah / hapus transaksi kas | ✅ | ✅ | ❌ |
+| Ekspor data warga & rekap iuran (Excel/PDF) | ✅ | ✅ | ❌ |
+| Mendaftar sendiri sebagai warga baru (tanpa login) | — | — | ✅ |
+| Aktivasi / tolak pendaftaran warga baru | ✅ | ✅ | ❌ |
 | Lihat log aktivitas (audit) | ✅ | ❌ | ❌ |
 
 Catatan:
@@ -54,7 +59,22 @@ Catatan:
   - *Per warga:* riwayat semua tagihan dan pembayaran satu KK beserta total tunggakan.
   - *Keseluruhan:* tabel matriks rumah × bulan (✅ lunas / ⏳ menunggu / ❌ belum), total pemasukan per bulan, dan persentase kepatuhan.
   - Warga melihat versi ringkas (nama kepala keluarga, no. rumah, status), tanpa nominal pribadi dan tanpa data kontak.
-- **Kas RT (opsional, tahap 2):** catat pengeluaran agar laporan pemasukan dan pengeluaran transparan.
+
+### 3.2a Kas RT
+- **Pemasukan iuran** dihitung otomatis dari pembayaran iuran (`Payment`, berdasarkan tanggal bayar), jadi tidak dicatat dua kali.
+- **Transaksi kas lain** dicatat pengurus: *pengeluaran* (kebersihan, keamanan, sosial, kegiatan, operasional, perbaikan, lainnya) dan *pemasukan lain* (saldo awal, donasi, lainnya). Nota/kuitansi bisa dilampirkan dan disimpan privat.
+- **Laporan kas per tahun:** saldo awal, pemasukan iuran, pemasukan lain, pengeluaran, dan saldo akhir per bulan, ditambah pengeluaran per kategori.
+- **Transparansi:** semua warga yang login bisa melihat laporan kas dan nota, tetapi hanya pengurus yang bisa mencatat transaksi.
+- Saldo kas tampil di Beranda semua peran.
+
+### 3.2b Ekspor Excel/PDF
+| Laporan | Isi | Siapa |
+|---|---|---|
+| Data warga | Semua anggota keluarga aktif per rumah, termasuk NIK & No. KK lengkap (dengan catatan kerahasiaan) | pengurus, admin |
+| Rekap iuran | Matriks rumah × bulan (✓ lunas, … menunggu, ✕ belum), tunggakan, pemasukan per bulan | pengurus, admin |
+| Laporan kas | Ringkasan per bulan + rincian transaksi | semua yang login |
+
+Setiap ekspor dicatat di log aktivitas. Berkas PDF memakai A4 (lanskap untuk tabel lebar), dan berkas Excel siap difilter.
 
 ### 3.3 Berita & Kegiatan
 - Jenis posting: **Berita** (pengumuman) atau **Kegiatan** (punya tanggal, jam, dan lokasi).
@@ -63,7 +83,19 @@ Catatan:
 - Notifikasi (push/WhatsApp) saat ada posting baru dapat ditambahkan di tahap 2.
 
 ### 3.4 Umum
-- Login dengan no. HP/email + kata sandi. Akun warga dibuat oleh pengurus, atau warga mendaftar sendiri lalu diverifikasi pengurus.
+- Login dengan username/no. HP/email + kata sandi. Akun warga dibuat oleh pengurus, atau warga **mendaftar sendiri** (lihat 3.5).
+
+### 3.5 Pendaftaran warga baru
+1. Calon warga membuka **Daftar sebagai warga baru** dari halaman masuk. Formulirnya punya 4 langkah: akun (username, no. HP, kata sandi) → rumah & KK (termasuk status rumah) → data diri & anggota keluarga → periksa & setujui penggunaan data.
+2. Akun dibuat **nonaktif**. Data pendaftaran (termasuk NIK) disimpan terenkripsi. Jika pendaftar mencoba masuk, muncul pesan "menunggu aktivasi".
+3. Pengurus membuka **Pendaftaran Baru**, memeriksa data, lalu memilih salah satu:
+   - **Aktifkan, buat KK baru**: rumah & anggota keluarga dibuat sesuai isian.
+   - **Aktifkan, gabung ke KK yang sudah ada**: dipakai jika nomor rumah sudah terdaftar, misalnya anggota keluarga yang baru pindah masuk.
+   - **Tolak dengan alasan**: alasannya ditampilkan saat pendaftar mencoba masuk.
+4. Setelah diproses, salinan data pendaftaran dihapus karena sudah dipindahkan ke data warga.
+
+### 3.6 Status rumah
+Setiap KK/rumah punya **status rumah**: *Menetap* (dihuni sehari-hari) atau *Rumah singgah* (hanya sesekali ditinggali). Status ini terpisah dari status hunian (pemilik/kontrak/kos). Status rumah tampil di daftar & detail warga, bisa difilter, dan ikut diekspor. Saat ini rumah singgah tetap ditagih iuran yang sama.
 - Notifikasi dalam aplikasi untuk: bukti bayar baru, bukti diterima/ditolak, pengajuan perubahan data, dan berita baru.
 - Log audit untuk setiap perubahan data warga dan pembayaran: siapa, kapan, dan apa yang berubah.
 
@@ -88,7 +120,9 @@ Nama tabel di bawah mengikuti model Django (tabel fisiknya berawalan nama app, m
 | Model (app) | Kolom utama |
 |---|---|
 | `User` (accounts) | username, first_name, phone, email, password, role (`admin`/`pengurus`/`warga`), resident (1-1), is_active |
-| `Household` (residents) | no_kk 🔒, block, house_number, address, occupancy (`pemilik`/`kontrak`/`kos`), since, is_active |
+| `Household` (residents) | no_kk 🔒, block, house_number, address, occupancy (`pemilik`/`kontrak`/`kos`), residence_status (`menetap`/`singgah`), since, is_active |
+| `Registration` (residents) | user (nonaktif s.d. disetujui), name, house_label, payload 🔒 (JSON rumah + anggota, dihapus setelah diproses), status, review_note, reviewed_by, household |
+| `CashEntry` (finance) | kind (`pemasukan`/`pengeluaran`), category, description, amount, date, receipt 🔒, recorded_by |
 | `Resident` (residents) | household, nik 🔒, name, gender, birth_place, birth_date, religion, marital_status, relation, occupation, phone, status (`aktif`/`pindah`/`meninggal`) |
 | `ChangeRequest` (residents) | household, resident (opsional), requested_by, changes (json `{field: {old, new}}`), note, status (`pending`/`disetujui`/`ditolak`), review_note, reviewed_by, reviewed_at |
 | `FeeType` (dues) | name, amount, period (`bulanan`/`sekali`), description, is_active |
@@ -151,6 +185,9 @@ Warga membuka **Data Saya → Ajukan perubahan**. Field kontak langsung tersimpa
 | Iuran: unggah bukti | ✅ | ✅ | ✅ |
 | Berita & Kegiatan: daftar, detail | ✅ | ✅ | ✅ |
 | Berita & Kegiatan: form posting | ✅ | ✅ | — |
+| Kas RT: laporan, transaksi | lihat + catat | lihat + catat | lihat |
+| Pendaftaran warga baru (publik, 4 langkah) | — | — | ✅ (sebelum punya akun) |
+| Aktivasi pendaftaran | ✅ | ✅ | — |
 | Pengaturan RT, jenis iuran, pengguna | ✅ | — | — |
 | Profil & ganti kata sandi | ✅ | ✅ | ✅ |
 
@@ -177,10 +214,15 @@ Semua endpoint ada di bawah `/api/v1` (Django REST Framework) dan memakai sessio
 | POST | `/payment-proofs/{id}/approve`, `/payment-proofs/{id}/reject` | pengurus+ |
 | GET | `/posts`, `/posts/{id}` | semua |
 | POST/PUT/DELETE | `/posts`, `/posts/{id}` | pengurus+ |
-| CRUD | `/fee-types`, `/users`, `/settings` | admin |
+| POST | `/auth/register/` | publik (dibatasi 5×/jam per IP) |
+| GET/POST | `/registrations/`, `/registrations/{id}/approve/` (opsional `household`), `/registrations/{id}/reject/` | pengurus+ |
+| GET | `/cash-entries/`, `/cash-entries/report/?year=`, `/cash-entries/{id}/receipt/` | semua |
+| POST/PATCH/DELETE | `/cash-entries/` | pengurus+ |
+| GET | `/exports/{residents\|dues\|cash}/?file=xlsx\|pdf&year=` | residents & dues: pengurus+; cash: semua |
+| CRUD | `/fee-types`, `/users` | admin (lewat Django Admin) |
 
 ## 8. Tahapan pengembangan
 
 1. **MVP:** login & peran, data warga (CRUD + Data Saya), jenis iuran, tagihan bulanan, catat pembayaran, rekap, berita.
-2. **Tahap 2:** unggah & verifikasi bukti bayar, pengajuan perubahan data, notifikasi, PWA, ekspor Excel/PDF.
-3. **Tahap 3:** notifikasi Web Push, kas RT, RSVP kegiatan, notifikasi WhatsApp, pembayaran QRIS otomatis.
+2. **Tahap 2 (selesai):** unggah & verifikasi bukti bayar, pengajuan perubahan data, PWA, Kas RT, ekspor Excel/PDF, pendaftaran mandiri warga, status rumah.
+3. **Berikutnya:** notifikasi (Web Push/WhatsApp), RSVP kegiatan, pembayaran QRIS otomatis, tarif iuran khusus rumah singgah (jika disepakati warga).

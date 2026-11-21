@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { errMsg, http } from '@/api/http'
 import type { Dashboard } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
@@ -12,6 +12,9 @@ const auth = useAuthStore()
 const data = ref<Dashboard | null>(null)
 const loading = ref(true)
 const error = ref('')
+const pendingTotal = computed(() =>
+  data.value?.staff ? data.value.staff.pending_proofs + data.value.staff.pending_changes + data.value.staff.pending_registrations : 0,
+)
 
 async function load() {
   loading.value = true
@@ -59,10 +62,8 @@ onMounted(load)
         </div>
         <div class="card">
           <div class="text-sm text-muted">Perlu tindakan</div>
-          <div class="text-2xl font-bold" :class="data.staff.pending_proofs + data.staff.pending_changes > 0 && 'text-warn'">
-            {{ data.staff.pending_proofs + data.staff.pending_changes }}
-          </div>
-          <div class="text-xs text-muted">{{ data.staff.pending_proofs }} bukti · {{ data.staff.pending_changes }} data</div>
+          <div class="text-2xl font-bold" :class="{ 'text-warn': pendingTotal > 0 }">{{ pendingTotal }}</div>
+          <div class="text-xs text-muted">{{ data.staff.pending_proofs }} bukti · {{ data.staff.pending_changes }} data · {{ data.staff.pending_registrations }} daftar</div>
         </div>
       </div>
 
@@ -79,6 +80,11 @@ onMounted(load)
             <RouterLink to="/pengajuan" class="flex items-center gap-3 py-3">
               <span class="grid size-10 place-items-center rounded-xl bg-primary-soft text-primary"><AppIcon name="inbox" /></span>
               <span class="flex-1"><b>Pengajuan perubahan data</b><br /><span class="text-sm text-muted">{{ data.staff.pending_changes }} pengajuan menunggu</span></span>
+              <AppIcon name="chevron" class="text-muted" />
+            </RouterLink>
+            <RouterLink to="/pendaftaran" class="flex items-center gap-3 py-3">
+              <span class="grid size-10 place-items-center rounded-xl bg-ok-soft text-ok"><AppIcon name="userplus" /></span>
+              <span class="flex-1"><b>Aktivasi warga baru</b><br /><span class="text-sm text-muted">{{ data.staff.pending_registrations }} pendaftaran menunggu</span></span>
               <AppIcon name="chevron" class="text-muted" />
             </RouterLink>
           </div>
@@ -117,6 +123,13 @@ onMounted(load)
             </RouterLink>
           </div>
         </section>
+
+        <!-- Kas RT -->
+        <RouterLink to="/kas" class="card flex items-center gap-3 hover:bg-surface-2">
+          <span class="grid size-11 flex-none place-items-center rounded-xl bg-primary-soft text-primary"><AppIcon name="cash" :size="22" /></span>
+          <span class="flex-1"><span class="block text-sm text-muted">Saldo kas RT</span><b class="text-xl">{{ rp(data.cash_balance) }}</b></span>
+          <span class="text-sm text-primary">Laporan</span>
+        </RouterLink>
 
         <!-- Kegiatan -->
         <section class="card">

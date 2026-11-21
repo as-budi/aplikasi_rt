@@ -1,6 +1,6 @@
 # RT Kita: Aplikasi Administrasi RT
 
-Data warga, iuran (dengan unggah & verifikasi bukti bayar), serta berita/kegiatan untuk **admin**, **pengurus**, dan **warga**.
+Data warga (termasuk pendaftaran mandiri warga baru & status rumah menetap/singgah), iuran (dengan unggah & verifikasi bukti bayar), Kas RT, ekspor Excel/PDF, serta berita/kegiatan untuk **admin**, **pengurus**, dan **warga**.
 Satu aplikasi web responsif (PWA) yang bisa dipasang di HP seperti aplikasi native.
 
 - Backend: Django 5.2 + Django REST Framework, MySQL 8.4, Celery + Redis
@@ -28,7 +28,7 @@ docker compose exec api python manage.py seed_demo   # data contoh (opsional)
 | http://localhost:8000/api/docs/ | Dokumentasi API (Swagger) |
 | http://localhost:8025 | Mailpit (email tangkapan) |
 
-Akun dari `seed_demo` (kata sandi dicetak oleh perintah tersebut): `admin` (admin), `ketua` & `bendahara` (pengurus), `budi`, `rina`, dll. (warga).
+Akun dari `seed_demo` (kata sandi dicetak oleh perintah tersebut): `admin` (admin), `ketua` & `bendahara` (pengurus), `budi`, `rina`, dll. (warga), dan `andi` (pendaftar baru yang menunggu aktivasi).
 Untuk mengulang data contoh dari awal: `docker compose down -v`, lalu jalankan langkah di atas lagi.
 
 ## Perintah sehari-hari

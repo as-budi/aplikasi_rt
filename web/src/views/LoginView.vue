@@ -48,7 +48,8 @@ async function submit() {
         <p v-if="error" class="mb-3 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad" role="alert">{{ error }}</p>
         <button class="btn btn-primary w-full py-2.5" :disabled="busy">{{ busy ? 'Memproses…' : 'Masuk' }}</button>
       </form>
-      <p class="mt-5 text-center text-sm text-muted">Belum punya akun atau lupa kata sandi? Hubungi pengurus RT.</p>
+      <RouterLink to="/daftar" class="btn mt-4 w-full">Daftar sebagai warga baru</RouterLink>
+      <p class="mt-4 text-center text-sm text-muted">Lupa kata sandi? Hubungi pengurus RT.</p>
     </div>
   </div>
 </template>

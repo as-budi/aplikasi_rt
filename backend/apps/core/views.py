@@ -7,9 +7,10 @@ from apps.core.permissions import is_staff_rt
 from apps.core.utils import aggregate_status, current_period
 from apps.dues.models import Bill, PaymentProof
 from apps.dues.serializers import BillSerializer
+from apps.finance.services import current_balance
 from apps.posts.models import Post
 from apps.posts.serializers import PostSerializer
-from apps.residents.models import ChangeRequest, Household, Resident
+from apps.residents.models import ChangeRequest, Household, Registration, Resident
 
 
 class DashboardView(APIView):
@@ -18,7 +19,7 @@ class DashboardView(APIView):
     def get(self, request):
         user = request.user
         period = current_period()
-        data = {"period": period, "me": None, "staff": None}
+        data = {"period": period, "me": None, "staff": None, "cash_balance": current_balance()}
 
         household = user.household
         if household:
@@ -59,6 +60,7 @@ class DashboardView(APIView):
                 "target": current_bills.aggregate(s=Sum("amount"))["s"] or 0,
                 "pending_proofs": PaymentProof.objects.filter(status=PaymentProof.Status.PENDING).count(),
                 "pending_changes": ChangeRequest.objects.filter(status=ChangeRequest.Status.PENDING).count(),
+                "pending_registrations": Registration.objects.filter(status=Registration.Status.PENDING).count(),
                 "top_arrears": [
                     {
                         "household_id": t["household"],

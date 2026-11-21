@@ -54,6 +54,8 @@ async function logout() {
     <section class="card">
       <div class="list">
         <RouterLink to="/saya" class="flex items-center gap-3 py-3"><AppIcon name="idcard" /> <span class="flex-1">Data keluarga saya</span><AppIcon name="chevron" class="text-muted" /></RouterLink>
+        <RouterLink to="/kas" class="flex items-center gap-3 py-3"><AppIcon name="cash" /> <span class="flex-1">Kas RT (laporan keuangan)</span><AppIcon name="chevron" class="text-muted" /></RouterLink>
+        <RouterLink v-if="auth.isStaff" to="/pendaftaran" class="flex items-center gap-3 py-3"><AppIcon name="userplus" /> <span class="flex-1">Pendaftaran warga baru</span><AppIcon name="chevron" class="text-muted" /></RouterLink>
         <RouterLink v-if="auth.isStaff" to="/pengajuan" class="flex items-center gap-3 py-3"><AppIcon name="inbox" /> <span class="flex-1">Pengajuan perubahan data</span><AppIcon name="chevron" class="text-muted" /></RouterLink>
         <a v-if="auth.isAdmin" href="/admin/" class="flex items-center gap-3 py-3"><AppIcon name="settings" /> <span class="flex-1">Pengaturan (Django Admin): pengguna, jenis iuran, log</span><AppIcon name="chevron" class="text-muted" /></a>
       </div>
